@@ -516,11 +516,25 @@ async function startServer() {
         {
           name: 'disable-preview-hmr-client',
           transformIndexHtml(html: string) {
-            return html.replace(/\s*<script type="module" src="\/@vite\/client"><\/script>/, '');
+            // Vite may vary attribute order or quoting when injecting its client.
+            // Remove every injected client tag because preview does not support HMR sockets.
+            return html.replace(/\s*<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>[\s\S]*?<\/script>/gi, '');
           },
         },
       ],
       appType: 'spa',
+    });
+
+    // Handle the document ourselves so the preview never receives Vite's
+    // reconnecting client script. Module transforms still come from Vite.
+    app.get('/', async (req: Request, res: Response, next) => {
+      try {
+        const template = await fs.promises.readFile(path.resolve(process.cwd(), 'index.html'), 'utf8');
+        const html = await vite.transformIndexHtml(req.originalUrl, template);
+        res.type('html').send(html.replace(/\s*<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>[\s\S]*?<\/script>/gi, ''));
+      } catch (error) {
+        next(error);
+      }
     });
     app.use(vite.middlewares);
   } else {
