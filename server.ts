@@ -496,6 +496,11 @@ async function startServer() {
 
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
+    // The preview proxy does not support Vite's HMR WebSocket. Serve a no-op
+    // client so Vite cannot inject a reconnecting socket into the SPA.
+    app.get('/@vite/client', (_req: Request, res: Response) => {
+      res.type('application/javascript').send('');
+    });
     const vite = await createViteServer({
       // The Express server is the public listener in preview/development. Vite's
       // standalone HMR socket cannot survive the preview proxy's server restarts,
@@ -504,10 +509,17 @@ async function startServer() {
         middlewareMode: true,
         hmr: false,
         // The preview proxy does not provide a stable Vite HMR socket.
-        // Disable both the socket and watcher so Vite never injects or
-        // attempts to reconnect the /@vite/client websocket.
+        // Disable both the socket and watcher so Vite never reconnects.
         watch: null,
       },
+      plugins: [
+        {
+          name: 'disable-preview-hmr-client',
+          transformIndexHtml(html: string) {
+            return html.replace(/\s*<script type="module" src="\/@vite\/client"><\/script>/, '');
+          },
+        },
+      ],
       appType: 'spa',
     });
     app.use(vite.middlewares);
