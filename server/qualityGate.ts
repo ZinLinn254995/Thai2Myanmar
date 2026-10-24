@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { LessonScript } from '../src/types/index.ts';
-import { sqliteDb, QualityAuditRecord } from './db.ts';
+import { LessonScript, QualityAuditRecord } from '../src/types/index.ts';
+import { sqliteDb } from './db.ts';
 
 const execAsync = promisify(exec);
 
@@ -202,8 +202,19 @@ export class QualityGate {
 
     // 8. Video Media Integrity Check (if video file path is provided or exists)
     let videoIntegrityVerified = false;
+    let mediaChecks: QualityAuditRecord['mediaChecks'] = undefined;
+
     if (videoFilePath && fs.existsSync(videoFilePath)) {
       const probe = await this.probeVideoFile(videoFilePath);
+      mediaChecks = {
+        videoFileExists: true,
+        videoCodecValid: probe.videoCodec.toLowerCase().includes('h264') || probe.videoCodec === 'h264',
+        audioCodecValid: probe.audioCodec.toLowerCase().includes('aac') || probe.audioCodec === 'aac',
+        isVerticalPortrait: probe.height >= probe.width,
+        actualVideoDurationSec: probe.durationSec,
+        fileSizeBytes: probe.fileSizeBytes,
+      };
+
       if (probe.valid) {
         videoIntegrityVerified = true;
         // Verify vertical 9:16 aspect ratio
@@ -226,9 +237,29 @@ export class QualityGate {
         );
       }
     } else {
-      // If video has not been rendered yet, note it
-      recommendations.push('Video has not been rendered or probed yet (ဗီဒီယို မထုတ်လုပ်ရသေးပါ).');
+      recommendations.push('Video media has not been rendered or probed yet (ဗီဒီယို မထုတ်လုပ်ရသေးပါ).');
     }
+
+    const fullLessonText = JSON.stringify(lesson);
+    const politeParticlesDetected = /ครับ|ค่ะ|คะ|ခပ်|ခရတ်ပ်|ခါ|ခ/.test(fullLessonText);
+    const toneGuidancePresent = (lesson.vocabulary || []).some(v => Boolean(v.toneDescription && v.toneDescription.trim().length > 0));
+
+    const structuralChecks = {
+      durationTargetMet: durationOver60s,
+      thaiCharactersPresent: thaiScriptValid,
+      burmesePhoneticsFieldPresent: burmesePronunciationPresent,
+      burmeseTranslationFieldPresent: burmeseTranslationPresent,
+      viralHookStructureComplete: viralHookPresent,
+      quizStructureComplete: quizInteractive,
+      repetitionCheckPassed: !repetitionDetected,
+    };
+
+    const linguisticVerification: QualityAuditRecord['linguisticVerification'] = {
+      status: 'heuristic_verified',
+      disclaimer: 'Automated linguistic checks verify Thai Unicode script encoding, phonetic guidance presence, and structural syntax. Semantic tone accuracy, colloquial idioms, and polite particle registers (ครับ/ค่ะ) should be reviewed by a native bilingual speaker.',
+      politeParticlesDetected,
+      toneGuidancePresent,
+    };
 
     const finalScore = Math.max(0, Math.min(100, score));
     const passed = finalScore >= 80;
@@ -248,6 +279,9 @@ export class QualityGate {
         videoIntegrityVerified,
         repetitionDetected,
       },
+      structuralChecks,
+      mediaChecks,
+      linguisticVerification,
       recommendationsMm: recommendations,
       auditedAt: new Date().toISOString(),
     };

@@ -10,6 +10,7 @@ import { productionQueue } from './server/productionQueue.ts';
 import { publishService } from './server/publishService.ts';
 import { automationScheduler } from './server/scheduler.ts';
 import { qualityGate } from './server/qualityGate.ts';
+import { ffmpegRenderer } from './server/ffmpegRenderer.ts';
 import { LessonScript } from './src/types/index.ts';
 
 dotenv.config();
@@ -176,8 +177,18 @@ app.post('/api/lessons/generate', async (req: Request, res: Response) => {
 app.post('/api/lessons', (req: Request, res: Response) => {
   const lessonData = req.body;
   if (!lessonData.id) {
-    lessonData.id = `lesson-${Date.now()}`;
+    lessonData.id = `lesson-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   }
+  if (!lessonData.title) {
+    lessonData.title = lessonData.topic || 'Untitled Thai Lesson';
+  }
+  if (!lessonData.status) {
+    lessonData.status = 'Draft';
+  }
+  if (!lessonData.createdAt) {
+    lessonData.createdAt = new Date().toISOString();
+  }
+  lessonData.updatedAt = new Date().toISOString();
   const saved = sqliteDb.saveLesson(lessonData);
   res.json({ success: true, data: saved });
 });
@@ -272,10 +283,15 @@ app.post('/api/quality/audit/:lessonId', async (req: Request, res: Response) => 
   res.json({ success: true, data: audit });
 });
 
-app.get('/api/quality/audit/:lessonId', (req: Request, res: Response) => {
-  const audit = sqliteDb.getQualityAuditByLessonId(req.params.lessonId);
-  if (!audit) {
-    return res.status(404).json({ success: false, error: 'No audit record found for this lesson' });
+app.get('/api/quality/audit/:lessonId', async (req: Request, res: Response) => {
+  let audit = sqliteDb.getQualityAuditByLessonId(req.params.lessonId);
+  if (!audit || !audit.structuralChecks) {
+    const lesson = sqliteDb.getLessonById(req.params.lessonId);
+    if (!lesson) {
+      return res.status(404).json({ success: false, error: 'No lesson found for this ID' });
+    }
+    const videoFilePath = lesson.renderedVideoId ? path.join(VIDEOS_DIR, `${lesson.renderedVideoId}.mp4`) : undefined;
+    audit = await qualityGate.auditLesson(lesson, videoFilePath);
   }
   res.json({ success: true, data: audit });
 });
@@ -412,12 +428,58 @@ app.post('/api/publish/schedule', (req: Request, res: Response) => {
 });
 
 app.post('/api/publish/checklist', (req: Request, res: Response) => {
-  const { postId, item, value, realPostUrl } = req.body;
+  const { postId, item, value } = req.body;
   try {
-    const updated = publishService.updateChecklist(postId, item, value, realPostUrl);
+    const updated = publishService.updateChecklist(postId, item, value);
     res.json({ success: true, data: updated });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/publish/confirm', (req: Request, res: Response) => {
+  const { postId, confirmationMethod, postUrl, confirmedByOperator, confirmationNotes } = req.body;
+  try {
+    const updated = publishService.confirmPublication({
+      postId,
+      confirmationMethod,
+      postUrl,
+      confirmedByOperator: Boolean(confirmedByOperator),
+      confirmationNotes,
+    });
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/publish/revert', (req: Request, res: Response) => {
+  const { postId } = req.body;
+  try {
+    const updated = publishService.revertPublication(postId);
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// System Environment Diagnostics
+app.get('/api/system/ffmpeg-status', async (req: Request, res: Response) => {
+  try {
+    const status = await ffmpegRenderer.checkEnvironment();
+    res.json({ success: true, data: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/voice/test', async (req: Request, res: Response) => {
+  const { language } = req.body;
+  try {
+    const result = await voiceService.testSpeechEngine(language || 'th-TH');
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -427,9 +489,18 @@ app.post('/api/scheduler/run-now', async (req: Request, res: Response) => {
   res.json(result);
 });
 
-// AI Providers
-app.get('/api/providers', (req: Request, res: Response) => {
+// AI Providers with dynamic environment detection
+app.get('/api/providers', async (req: Request, res: Response) => {
+  const env = await ffmpegRenderer.checkEnvironment();
   const providers = sqliteDb.getAIProviders();
+  const ffmpegProvider = providers.find(p => p.id === 'ffmpeg-native-engine');
+  if (ffmpegProvider) {
+    ffmpegProvider.isRealConnected = env.ffmpegInstalled && env.ffprobeInstalled;
+    ffmpegProvider.status = (env.ffmpegInstalled && env.ffprobeInstalled) ? 'active' : 'not_configured';
+    ffmpegProvider.notes = env.ffmpegInstalled 
+      ? `Native ${env.version.split(' ')[2] || '4.4+'} H.264/AAC MP4 compositor (Detected: ffmpeg + ffprobe).`
+      : `FFmpeg binary not detected in PATH. Please install ffmpeg and ffprobe packages.`;
+  }
   res.json({ success: true, data: providers });
 });
 

@@ -59,13 +59,12 @@ export class PublishService {
   }
 
   /**
-   * Update post checklist item and confirm truthful publishing status
+   * Update post checklist item. Checklist actions alone do NOT falsely claim published status.
    */
   updateChecklist(
     postId: string, 
     item: keyof ScheduledPost['checklist'], 
-    value: boolean,
-    realPostUrl?: string
+    value: boolean
   ): ScheduledPost {
     const posts = sqliteDb.getScheduledPosts();
     const post = posts.find(p => p.id === postId);
@@ -75,38 +74,109 @@ export class PublishService {
 
     post.checklist[item] = value;
 
-    if (item === 'manualUploadCompleted') {
-      if (value) {
-        post.status = 'published';
-        // Only set post URL if the user provides the real link; NEVER fabricate fake mock URLs
-        if (realPostUrl && realPostUrl.startsWith('http')) {
-          post.publishedPostUrl = realPostUrl;
-        }
-
-        const lesson = sqliteDb.getLessonById(post.lessonId);
-        if (lesson) {
-          lesson.status = 'Published';
-          sqliteDb.saveLesson(lesson);
-        }
-
-        sqliteDb.addLog({
-          category: 'publish',
-          action: 'Post Published (Manual Verified)',
-          details: `Post "${post.lessonTitle}" marked as published on ${post.accountHandle}. ${realPostUrl ? `URL: ${realPostUrl}` : '(Manual Package upload)'}`,
-          level: 'success',
-        });
-      } else {
-        post.status = 'scheduled';
-        post.publishedPostUrl = undefined;
-        const lesson = sqliteDb.getLessonById(post.lessonId);
-        if (lesson) {
-          lesson.status = 'Scheduled';
-          sqliteDb.saveLesson(lesson);
-        }
-      }
+    // Transition to ready_for_upload if media & metadata are prepped, but do NOT falsely mark published
+    if (post.status !== 'published') {
+      const isPrepped = post.checklist.videoDownloaded && 
+                        post.checklist.captionCopied && 
+                        post.checklist.tagsCopied && 
+                        post.checklist.soundVerified;
+      post.status = isPrepped ? 'ready_for_upload' : 'scheduled';
     }
 
     sqliteDb.saveScheduledPost(post);
+    return post;
+  }
+
+  /**
+   * Explicitly confirm publication with truthful verification.
+   * Requires either a validated TikTok URL or an explicit operator manual declaration.
+   */
+  confirmPublication(params: {
+    postId: string;
+    confirmationMethod: 'validated_url' | 'manual_declaration';
+    postUrl?: string;
+    confirmedByOperator: boolean;
+    confirmationNotes?: string;
+  }): ScheduledPost {
+    const posts = sqliteDb.getScheduledPosts();
+    const post = posts.find(p => p.id === params.postId);
+    if (!post) {
+      throw new Error(`Scheduled post ${params.postId} not found.`);
+    }
+
+    if (params.confirmationMethod === 'validated_url') {
+      const url = (params.postUrl || '').trim();
+      const tiktokRegex = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?tiktok\.com\/[A-Za-z0-9@_./?=&-]+$/i;
+      if (!url || !tiktokRegex.test(url)) {
+        throw new Error('Invalid TikTok post URL format. URL must begin with https://tiktok.com or https://www.tiktok.com/@handle/video/...');
+      }
+      post.publishedPostUrl = url;
+      post.confirmationMethod = 'validated_url';
+    } else if (params.confirmationMethod === 'manual_declaration') {
+      if (!params.confirmedByOperator) {
+        throw new Error('Operator declaration must be explicitly checked to confirm manual publication without URL.');
+      }
+      post.publishedPostUrl = undefined;
+      post.confirmationMethod = 'manual_declaration';
+    } else {
+      throw new Error('Unsupported publication confirmation method.');
+    }
+
+    post.status = 'published';
+    post.checklist.manualUploadCompleted = true;
+    post.confirmedAt = new Date().toISOString();
+    post.confirmationNotes = params.confirmationNotes || (post.publishedPostUrl ? 'Confirmed with live TikTok post URL' : 'Confirmed via explicit operator manual declaration');
+
+    sqliteDb.saveScheduledPost(post);
+
+    const lesson = sqliteDb.getLessonById(post.lessonId);
+    if (lesson) {
+      lesson.status = 'Published';
+      sqliteDb.saveLesson(lesson);
+    }
+
+    sqliteDb.addLog({
+      category: 'publish',
+      action: 'Post Publication Truthfully Confirmed',
+      details: `Post "${post.lessonTitle}" verified on ${post.accountHandle}. Method: ${post.confirmationMethod} ${post.publishedPostUrl ? `URL: ${post.publishedPostUrl}` : ''}`,
+      level: 'success',
+    });
+
+    return post;
+  }
+
+  /**
+   * Revert publication status back to scheduled / ready
+   */
+  revertPublication(postId: string): ScheduledPost {
+    const posts = sqliteDb.getScheduledPosts();
+    const post = posts.find(p => p.id === postId);
+    if (!post) {
+      throw new Error(`Scheduled post ${postId} not found.`);
+    }
+
+    post.status = 'scheduled';
+    post.checklist.manualUploadCompleted = false;
+    post.publishedPostUrl = undefined;
+    post.confirmationMethod = undefined;
+    post.confirmedAt = undefined;
+    post.confirmationNotes = undefined;
+
+    sqliteDb.saveScheduledPost(post);
+
+    const lesson = sqliteDb.getLessonById(post.lessonId);
+    if (lesson) {
+      lesson.status = 'Scheduled';
+      sqliteDb.saveLesson(lesson);
+    }
+
+    sqliteDb.addLog({
+      category: 'publish',
+      action: 'Post Publication Reverted',
+      details: `Reverted publication state for "${post.lessonTitle}" back to scheduled.`,
+      level: 'info',
+    });
+
     return post;
   }
 }

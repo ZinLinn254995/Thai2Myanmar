@@ -34,6 +34,12 @@ export const PublishingHub: React.FC = () => {
   const [scheduleAccountId, setScheduleAccountId] = useState(accounts[0]?.id || '');
   const [scheduleDateTime, setScheduleDateTime] = useState(new Date(Date.now() + 3600000 * 4).toISOString().slice(0, 16));
 
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmMethod, setConfirmMethod] = useState<'validated_url' | 'manual_declaration'>('validated_url');
+  const [confirmUrl, setConfirmUrl] = useState('');
+  const [confirmOperatorCheckbox, setConfirmOperatorCheckbox] = useState(false);
+  const [confirmNotes, setConfirmNotes] = useState('');
+
   const jpAccount = accounts.find(a => a.region === 'Japan') || accounts[0];
 
   const handleCopy = (text: string, label: string) => {
@@ -41,18 +47,62 @@ export const PublishingHub: React.FC = () => {
     showToast(`${label} Copy ကူးယူပြီးပါပြီ (Copied to clipboard)`, 'success');
   };
 
-  const [realUrlInput, setRealUrlInput] = useState('');
-
   const handleToggleChecklist = async (postId: string, item: keyof ScheduledPost['checklist'], currentVal: boolean) => {
     try {
-      const updated = await api.updateChecklist(postId, item, !currentVal, realUrlInput.trim() || undefined);
+      const updated = await api.updateChecklist(postId, item, !currentVal);
       setSelectedPost(updated);
       await refreshData();
-      if (item === 'manualUploadCompleted' && !currentVal) {
-        showToast('TikTok Post တင်ပြီးကြောင်း အတည်ပြုပြီးပါပြီ! (Truthfully Marked as Published)', 'success');
-      }
+      showToast('Checklist updated', 'info');
     } catch (err: any) {
       showToast(err.message || 'Checklist update failed', 'error');
+    }
+  };
+
+  const handleConfirmPublication = async () => {
+    if (!selectedPost) return;
+
+    if (confirmMethod === 'validated_url') {
+      const url = confirmUrl.trim();
+      const tiktokRegex = /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?tiktok\.com\/[A-Za-z0-9@_./?=&-]+$/i;
+      if (!url || !tiktokRegex.test(url)) {
+        showToast('ကျေးဇူးပြု၍ မှန်ကန်သော TikTok Video URL ထည့်သွင်းပါ (e.g. https://www.tiktok.com/@thai2myanmar_jp/video/...)', 'warn');
+        return;
+      }
+    } else {
+      if (!confirmOperatorCheckbox) {
+        showToast('ကျေးဇူးပြု၍ TikTok သို့ အမှန်တကယ် တင်ပြီးစီးကြောင်း အတည်ပြုချက်ပေးပါ', 'warn');
+        return;
+      }
+    }
+
+    try {
+      const updated = await api.confirmPublication({
+        postId: selectedPost.id,
+        confirmationMethod: confirmMethod,
+        postUrl: confirmMethod === 'validated_url' ? confirmUrl.trim() : undefined,
+        confirmedByOperator: confirmOperatorCheckbox,
+        confirmationNotes: confirmNotes.trim() || undefined,
+      });
+
+      setSelectedPost(updated);
+      await refreshData();
+      setConfirmModalOpen(false);
+      setConfirmUrl('');
+      setConfirmOperatorCheckbox(false);
+      showToast('TikTok Post ထုတ်ဝေမှု အမှန်တကယ် အတည်ပြုပြီးပါပြီ (Truthfully Confirmed as Published)', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Confirmation failed', 'error');
+    }
+  };
+
+  const handleRevertPublication = async (postId: string) => {
+    try {
+      const updated = await api.revertPublication(postId);
+      setSelectedPost(updated);
+      await refreshData();
+      showToast('ထုတ်ဝေမှု အခြေအနေကို ပယ်ဖျက်ပြီး Scheduled သို့ ပြန်လည်သတ်မှတ်ပါသည်', 'info');
+    } catch (err: any) {
+      showToast(err.message || 'Revert failed', 'error');
     }
   };
 
@@ -271,12 +321,27 @@ export const PublishingHub: React.FC = () => {
                 </div>
               </div>
 
-              {/* 2. Mandatory Verification Checklist */}
+              {/* 2. Mandatory Preparation Checklist (Steps 1 to 4) */}
               <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/60 space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Publishing Verification Checklist (စစ်ဆေးချက်များ)</span>
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    <span>Preparation Checklist (ထုတ်ဝေမှုကြိုတင်ပြင်ဆင်ချက်များ)</span>
+                  </h4>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                    selectedPost.status === 'published'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      : selectedPost.status === 'ready_for_upload'
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                  }`}>
+                    {selectedPost.status === 'published' 
+                      ? '✓ PUBLISHED' 
+                      : selectedPost.status === 'ready_for_upload' 
+                      ? 'READY FOR UPLOAD' 
+                      : 'IN PREPARATION'}
+                  </span>
+                </div>
 
                 <div className="space-y-2 text-xs">
                   {[
@@ -284,7 +349,6 @@ export const PublishingHub: React.FC = () => {
                     { key: 'captionCopied' as const, label: '2. TikTok Caption & Emojis Copied (စာသား ကူးယူပြီးစီးခြင်း)' },
                     { key: 'tagsCopied' as const, label: '3. Viral Thai2Myanmar Hashtags Copied (Hashtag များ ကူးယူပြီးစီးခြင်း)' },
                     { key: 'soundVerified' as const, label: '4. Audio & Thai Pronunciation Verified (ထိုင်း-မြန်မာ အသံထွက် စစ်ဆေးပြီးခြင်း)' },
-                    { key: 'manualUploadCompleted' as const, label: '5. Uploaded to TikTok Japan Account & Published (TikTok သို့ အမှန်တကယ် တင်ပြီးစီးခြင်း)' },
                   ].map((item) => (
                     <label
                       key={item.key}
@@ -304,50 +368,180 @@ export const PublishingHub: React.FC = () => {
                 </div>
               </div>
 
-              {/* Real URL input when completing upload */}
-              {!selectedPost.checklist.manualUploadCompleted && (
-                <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
-                  <label className="text-[11px] font-bold text-slate-300 block">
-                    TikTok Post URL (ရရှိလာသော အမှန်တကယ် Post Link ထည့်သွင်းပါ - Optional):
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://www.tiktok.com/@thai2myanmar_jp/video/..."
-                    value={realUrlInput}
-                    onChange={(e) => setRealUrlInput(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
-                  />
-                  <span className="text-[10px] text-slate-400 block">
-                    Never fabricated. If left blank, it is truthfully marked as "Manual Package Uploaded".
-                  </span>
-                </div>
-              )}
-
-              {/* Status summary */}
-              {selectedPost.checklist.manualUploadCompleted && (
-                <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-1.5 text-xs text-emerald-300">
-                  <div className="flex items-center gap-2 font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Post marked as Published on TikTok Japan (@thai2myanmar_jp).</span>
+              {/* Step 5: Truthful Publication Confirmation / Verification Box */}
+              {selectedPost.status === 'published' ? (
+                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-2.5 text-xs text-emerald-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                      <span>Verified Published on TikTok (@thai2myanmar_jp)</span>
+                    </div>
+                    <button
+                      onClick={() => handleRevertPublication(selectedPost.id)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 transition-colors"
+                    >
+                      Revert Status
+                    </button>
                   </div>
-                  {selectedPost.publishedPostUrl ? (
-                    <div className="pl-6 text-[11px] flex items-center gap-1 font-mono text-cyan-400">
-                      <span>Real URL:</span>
-                      <a href={selectedPost.publishedPostUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-white truncate">
-                        {selectedPost.publishedPostUrl}
-                      </a>
+
+                  <div className="space-y-1 text-slate-300 text-xs pl-7">
+                    <div>
+                      <span className="text-slate-400">Verification Method:</span>{' '}
+                      <span className="font-semibold text-emerald-300">
+                        {selectedPost.confirmationMethod === 'validated_url' ? 'Live TikTok Post URL' : 'Certified Operator Declaration'}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="pl-6 text-[11px] text-slate-300">
-                      Mode: Manually Uploaded via 1-Click Verification Package.
+                    {selectedPost.publishedPostUrl && (
+                      <div className="flex items-center gap-1 font-mono text-cyan-300">
+                        <span className="text-slate-400">Post Link:</span>
+                        <a href={selectedPost.publishedPostUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-white truncate max-w-md">
+                          {selectedPost.publishedPostUrl}
+                        </a>
+                      </div>
+                    )}
+                    {selectedPost.confirmedAt && (
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        Confirmed At: {new Date(selectedPost.confirmedAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-indigo-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Step 5: Truthful Publication Confirmation
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Never falsified. Mark published only after real upload to TikTok Japan account.
+                      </p>
                     </div>
-                  )}
+                    <button
+                      onClick={() => setConfirmModalOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Confirm Publication</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Explicit Publication Confirmation Modal */}
+      {confirmModalOpen && selectedPost && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-cyan-400" />
+                <h3 className="font-bold text-white text-sm">Truthful Publication Confirmation</h3>
+              </div>
+              <button onClick={() => setConfirmModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed font-myanmar">
+              TikTok Japan (@thai2myanmar_jp) သို့ အမှန်တကယ် Publish ပြုလုပ်ပြီးစီးကြောင်း အတည်ပြုရန် ရွေးချယ်ပါ:
+            </p>
+
+            <div className="space-y-3 text-xs">
+              {/* Option 1: Live URL */}
+              <label className={`block p-3 rounded-xl border cursor-pointer transition-colors ${
+                confirmMethod === 'validated_url' 
+                  ? 'bg-slate-800/80 border-cyan-500/50 text-white' 
+                  : 'bg-slate-900 border-slate-800 text-slate-400'
+              }`}>
+                <div className="flex items-center gap-2 font-bold text-xs mb-1.5">
+                  <input
+                    type="radio"
+                    name="confirmMethod"
+                    checked={confirmMethod === 'validated_url'}
+                    onChange={() => setConfirmMethod('validated_url')}
+                    className="accent-cyan-500"
+                  />
+                  <span>Option A: Provide Live TikTok Post URL (အကြံပြုချက်)</span>
+                </div>
+                {confirmMethod === 'validated_url' && (
+                  <div className="mt-2 space-y-1">
+                    <input
+                      type="url"
+                      placeholder="https://www.tiktok.com/@thai2myanmar_jp/video/..."
+                      value={confirmUrl}
+                      onChange={(e) => setConfirmUrl(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+                    />
+                    <span className="text-[10px] text-slate-400 block font-mono">
+                      Must match format: https://www.tiktok.com/@handle/video/...
+                    </span>
+                  </div>
+                )}
+              </label>
+
+              {/* Option 2: Operator Declaration */}
+              <label className={`block p-3 rounded-xl border cursor-pointer transition-colors ${
+                confirmMethod === 'manual_declaration' 
+                  ? 'bg-slate-800/80 border-cyan-500/50 text-white' 
+                  : 'bg-slate-900 border-slate-800 text-slate-400'
+              }`}>
+                <div className="flex items-center gap-2 font-bold text-xs mb-1.5">
+                  <input
+                    type="radio"
+                    name="confirmMethod"
+                    checked={confirmMethod === 'manual_declaration'}
+                    onChange={() => setConfirmMethod('manual_declaration')}
+                    className="accent-cyan-500"
+                  />
+                  <span>Option B: Manual Operator Declaration (Unlinked Upload)</span>
+                </div>
+                {confirmMethod === 'manual_declaration' && (
+                  <div className="mt-2 pl-4">
+                    <label className="flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmOperatorCheckbox}
+                        onChange={(e) => setConfirmOperatorCheckbox(e.target.checked)}
+                        className="mt-0.5 accent-cyan-500"
+                      />
+                      <span>
+                        I certify as the studio operator that this video package has been manually uploaded and published to @thai2myanmar_jp on TikTok.
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </label>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Optional Notes (မှတ်ချက်)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Uploaded at 18:00 JST prime time"
+                  value={confirmNotes}
+                  onChange={(e) => setConfirmNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button onClick={() => setConfirmModalOpen(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPublication}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-semibold text-xs shadow-md"
+              >
+                Confirm Truthful Publication
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Schedule Modal */}
       {scheduleModalOpen && (

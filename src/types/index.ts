@@ -160,6 +160,48 @@ export interface PublishingAccount {
   notes: string;
 }
 
+export interface QualityAuditRecord {
+  id: string;
+  lessonId: string;
+  score: number; // 0 to 100
+  passed: boolean;
+  checks: {
+    durationOver60s: boolean;
+    thaiScriptValid: boolean;
+    burmesePronunciationPresent: boolean;
+    burmeseTranslationPresent: boolean;
+    viralHookPresent: boolean;
+    quizInteractive: boolean;
+    videoIntegrityVerified: boolean;
+    repetitionDetected: boolean;
+  };
+  structuralChecks?: {
+    durationTargetMet: boolean;
+    thaiCharactersPresent: boolean;
+    burmesePhoneticsFieldPresent: boolean;
+    burmeseTranslationFieldPresent: boolean;
+    viralHookStructureComplete: boolean;
+    quizStructureComplete: boolean;
+    repetitionCheckPassed: boolean;
+  };
+  mediaChecks?: {
+    videoFileExists: boolean;
+    videoCodecValid: boolean;
+    audioCodecValid: boolean;
+    isVerticalPortrait: boolean;
+    actualVideoDurationSec: number;
+    fileSizeBytes: number;
+  };
+  linguisticVerification?: {
+    status: 'heuristic_verified' | 'pending_native_review' | 'native_reviewed';
+    disclaimer: string;
+    politeParticlesDetected: boolean;
+    toneGuidancePresent: boolean;
+  };
+  recommendationsMm: string[];
+  auditedAt: string;
+}
+
 export interface ScheduledPost {
   id: string;
   lessonId: string;
@@ -172,7 +214,7 @@ export interface ScheduledPost {
   caption: string;
   hashtags: string[];
   autoPublish: boolean;
-  status: 'scheduled' | 'publishing' | 'published' | 'failed';
+  status: 'scheduled' | 'ready_for_upload' | 'publishing' | 'published' | 'failed';
   checklist: {
     videoDownloaded: boolean;
     captionCopied: boolean;
@@ -180,7 +222,10 @@ export interface ScheduledPost {
     soundVerified: boolean;
     manualUploadCompleted: boolean;
   };
+  confirmationMethod?: 'validated_url' | 'manual_declaration';
   publishedPostUrl?: string;
+  confirmedAt?: string;
+  confirmationNotes?: string;
   createdAt: string;
 }
 

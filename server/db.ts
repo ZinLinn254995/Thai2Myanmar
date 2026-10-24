@@ -8,30 +8,14 @@ import {
   PublishingAccount, 
   ScheduledPost, 
   SystemSettings, 
-  ActivityLog 
+  ActivityLog,
+  QualityAuditRecord
 } from '../src/types/index.ts';
+
+export type { QualityAuditRecord };
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'thai2myanmar.sqlite');
-
-export interface QualityAuditRecord {
-  id: string;
-  lessonId: string;
-  score: number; // 0 to 100
-  passed: boolean;
-  checks: {
-    durationOver60s: boolean;
-    thaiScriptValid: boolean;
-    burmesePronunciationPresent: boolean;
-    burmeseTranslationPresent: boolean;
-    viralHookPresent: boolean;
-    quizInteractive: boolean;
-    videoIntegrityVerified: boolean;
-    repetitionDetected: boolean;
-  };
-  recommendationsMm: string[];
-  auditedAt: string;
-}
 
 class SQLiteDatabase {
   private db: DatabaseSync;

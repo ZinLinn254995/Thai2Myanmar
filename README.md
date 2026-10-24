@@ -2,98 +2,92 @@
 
 > **AI-Powered Video Production & Automation Platform for Thai Language Learning (TikTok Japan Focus Account)**
 
-Thai2Myanmar AI Studio is a full-stack, production-grade content automation platform specifically architected to design, structure, synthesize, render, and schedule Thai language educational TikTok videos for Myanmar learners and expats.
+Thai2Myanmar AI Studio is an enterprise-grade full-stack video automation studio specialized in teaching Thai to Burmese-speaking learners, expatriates in Thailand, and Myanmar workers in Japan.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Architecture & Implemented Capabilities
 
 1. **Pedagogical Lesson Architect**:
-   - Integrated with Google Gemini 3.8 Flash (`@google/genai` TypeScript SDK).
-   - Generates authentic Thai script, Paiboon/RTGS Romanization, high-accuracy Burmese phonetics (မြန်မာအသံထွက်), natural Burmese translation (မြန်မာဘာသာပြန်), tone guides, vocabulary usage tips, real-life context dialogues, and interactive quiz challenges.
-   - Section-by-section AI Rewriter (Hook, Vocabulary, Dialogue, Exercise, TikTok Caption).
+   - Integrated with **Google Gemini 3.8 Flash** (`@google/genai` TypeScript SDK) on the server side.
+   - Generates authentic Thai script, RTGS Romanization, Burmese phonetics (မြန်မာအသံထွက်) with tone nuances, natural Burmese translation (မြန်မာဘာသာပြန်), everyday dialogues, and interactive quiz challenges.
 
-2. **9:16 Vertical Video Production Studio**:
-   - 1080×1920 Vertical TikTok canvas simulator.
-   - 5-Scene visual storyboard (Hook, Core Vocabulary, Dialogue, Quiz, Outro).
-   - Real-time karaoke text highlighting synced with playback duration.
-   - Dual audio synchronization (Thai native speech + Myanmar teacher explanation).
-   - Customizable visual themes: Neon TikTok, Minimal Dark, Bangkok Sunset, Tokyo Cyber.
-   - **Instant Video Exporter**: Records 9:16 canvas frames and mixed audio via HTML5 Canvas + WebCodecs/MediaRecorder, allowing instant download of `.webm` / `.mp4` video files directly to the user's computer.
+2. **Genuine 1080×1920 MP4 Video Production Engine**:
+   - Built on native **FFmpeg** (`libx264` + `aac` + `librsvg`).
+   - SVG frame compositor utilizing native **Noto Sans Thai** and **Noto Sans Myanmar** system fonts for crisp typography.
+   - Outputs true H.264/AAC 1080×1920 vertical video MP4 files complying with TikTok Creator Rewards (>60s requirement).
+   - High-performance HTTP 206 partial content streaming for in-browser scrubbing and direct download.
 
-3. **Background Video Rendering Queue**:
-   - Asynchronous job queue (`/api/production/render`) with progressive stage checkpoints (Scene decomposition, phonetics calibration, karaoke timing, compositing, packaging).
-   - Full failure recovery, retry mechanisms, and cancellation controls.
+3. **High-Accuracy Voice Synthesis**:
+   - Uses **Gemini 3.8 Flash Lite TTS** (`gemini-3.8-flash-lite-tts`) for authentic 24 kHz speech narration.
+   - Inspects audio magic bytes for genuine WAV format verification.
+   - Never silently replaces narration with synthetic tones; failures return explicit diagnostics.
 
-4. **TikTok Japan Publishing Suite & 1-Click Package Kit**:
-   - Focused on `@thai2myanmar_jp` (TikTok Japan region account).
-   - 1-Click Copy Caption, 1-Click Copy Hashtags, and Direct Video Download.
-   - 5-step publishing checklist & upload status tracker.
+4. **Multi-Tier Quality Gate Auditor**:
+   - **Tier 1 (Structural Completeness)**: Validates Thai script characters, phonetic guidance fields, translation fields, 3-second retention hook, interactive quiz challenge, and curriculum repetition prevention.
+   - **Tier 2 (Media Stream Verification)**: Runs `ffprobe` to verify video codec (`h264`), audio codec (`aac`), portrait aspect ratio (`height >= width`), and actual elapsed duration (`>= 60s`).
+   - **Tier 3 (Linguistic Transparency)**: Transparently flags heuristic checks vs human native speaker review requirements for colloquial tones and polite particles (ครับ / ค่ะ).
 
-5. **Scheduler & Automation Guardrails**:
-   - Daily production limit enforcement (default: 3 videos/day).
-   - Timezone configuration (`Asia/Tokyo` JST UTC+9, `Asia/Yangon` MMT UTC+6:30).
-   - **TikTok Creator Rewards Check**: Enforces minimum script duration of 60 seconds (>60s required for Creator Rewards monetization).
-   - Duplicate Topic Prevention: Tracks historical lessons and rotates topics.
+5. **Truthful Publishing Hub**:
+   - 4-step preparation checklist (Video download, caption copy, hashtags copy, sound verification).
+   - Strict Step 5 publication confirmation requiring either a validated live TikTok URL (`https://www.tiktok.com/@handle/video/...`) or an explicit operator certification.
+   - No automatic mock URL fabrication.
 
-6. **AI Provider Architecture & Budget Protection**:
-   - Decoupled provider interface supporting Gemini 3.8 Flash, Gemini TTS, ElevenLabs, and Omni Video adapters.
-   - Token tracking, estimated USD spend, and MMK (မြန်မာကျပ်ငွေ) currency conversion.
-   - Hard daily and monthly budget caps with automated pipeline halts.
+6. **ACID Persistent Database**:
+   - Built using Node 22 native `node:sqlite` in WAL (Write-Ahead Logging) mode.
+   - Zero external binary compilation steps.
+   - Crash recovery automatically checks for interrupted rendering jobs on server boot and sets actionable retry states.
 
-7. **Data Persistence & Security**:
-   - File-backed persistent database in `/data/app_database.json`.
-   - Server-side execution of all Gemini API and audio calls—no keys or credentials exposed to the client.
+7. **PWA & Mobile Support**:
+   - Web App Manifest (`/public/manifest.json`) and high-resolution icons (192px, 512px, maskable, apple-touch-icon).
+   - In-app install banner with deferred prompt support and real-time offline status indicator.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js >= 18
-- `GEMINI_API_KEY` (configured in `.env` or AI Studio environment)
+- **Node.js**: >= 22.0.0 (required for native `node:sqlite`)
+- **FFmpeg**: `ffmpeg` and `ffprobe` installed with `libx264` and `librsvg`
+- **System Fonts**:
+  ```bash
+  apt-get update && apt-get install -y ffmpeg fonts-noto-core fonts-noto-extra fonts-noto-ui-core fonts-thai-tlwg fontconfig
+  ```
+- **Gemini API Key**: Attach `GEMINI_API_KEY` in environment variables or AI Studio Secrets.
 
-### Installation
+### Running Locally
 ```bash
 npm install
-```
-
-### Running in Development
-```bash
-npm run dev
-```
-The server will start on `http://localhost:3000` with Express full-stack API and Vite middleware.
-
-### Production Build
-```bash
 npm run build
-npm start
+npx tsx server.ts
 ```
+The server starts on `http://localhost:3000`.
 
 ---
 
-## ⚙️ Architecture Overview
+## ☁️ Deployment Guide
 
-```
-├── /server.ts                 # Express full-stack entry point & API routes
-├── /server/
-│   ├── storage.ts             # File-backed JSON database engine
-│   ├── geminiService.ts       # @google/genai Gemini 3.8 Flash SDK service
-│   ├── voiceService.ts        # Gemini TTS & audio synthesis engine
-│   ├── productionQueue.ts     # Background video rendering worker
-│   ├── scheduler.ts           # Daily automation cadence & limit manager
-│   └── publishService.ts      # TikTok post scheduler & checklist tracker
-├── /src/
-│   ├── components/            # UI Views (Dashboard, Studio, Video Engine, etc.)
-│   ├── context/AppContext.tsx # Global state, polling & bilingual engine
-│   ├── services/api.ts        # Client API SDK
-│   └── types/index.ts         # TypeScript data schemas
-└── /data/app_database.json    # Persistent database storage
+### Option 1: Docker / Container Runtime (Cloud Run, Fly.io, Railway)
+Use the included multi-stage `Dockerfile`:
+```bash
+docker build -t thai2myanmar-studio .
+docker run -p 3000:3000 -e GEMINI_API_KEY="your-key" -v $(pwd)/data:/app/data thai2myanmar-studio
 ```
 
----
+> **Important for Google Cloud Run**:
+> Because Cloud Run's local root disk is an in-memory tmpfs that resets on container shutdown, mount a Cloud Storage bucket to `/app/data` using Cloud Run Volume Mounts (Cloud Storage FUSE) to persist rendered MP4 videos and the SQLite database across restarts.
 
-## 🔒 Security & Limitations
+### Option 2: Linux VPS / Dedicated Server (Ubuntu/Debian)
+```bash
+# 1. Install system dependencies
+sudo apt update && sudo apt install -y ffmpeg fonts-noto-core fonts-noto-extra fonts-noto-ui-core fonts-thai-tlwg
 
-- **TikTok API Direct Posting**: TikTok's official Content Posting API requires partner application audits, webhook verification, and OAuth approval. To guarantee 100% operational reliability today, Thai2Myanmar AI Studio provides a robust **1-Click Manual Package Suite** (Instant Video Download, 1-Click Caption/Hashtags Copy, and Publishing Checklist) that eliminates unauthorized cookie automation while keeping accounts completely safe.
-- **API Secret Isolation**: All AI keys remain server-side in `process.env`.
+# 2. Clone and install
+git clone https://github.com/ZinLinn254995/Thai2Myanmar.git
+cd Thai2Myanmar
+npm ci
+
+# 3. Build and launch with systemd or PM2
+npm run build
+pm2 start "npx tsx server.ts" --name "thai2myanmar"
+```

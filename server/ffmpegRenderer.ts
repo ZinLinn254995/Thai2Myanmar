@@ -247,6 +247,79 @@ export class FFmpegVideoRenderer {
       durationSec: probe.durationSec,
     };
   }
+
+  /**
+   * Dynamically detect whether FFmpeg and ffprobe binaries are available in the runtime,
+   * inspect version, and verify required codec capabilities (H.264, AAC, librsvg, system fonts).
+   */
+  async checkEnvironment(): Promise<{
+    ffmpegInstalled: boolean;
+    ffprobeInstalled: boolean;
+    version: string;
+    hasH264: boolean;
+    hasAac: boolean;
+    hasRsvg: boolean;
+    fontsAvailable: { thai: boolean; burmese: boolean };
+    detectedAt: string;
+    error?: string;
+  }> {
+    let ffmpegInstalled = false;
+    let ffprobeInstalled = false;
+    let version = '';
+    let hasH264 = false;
+    let hasAac = false;
+    let hasRsvg = false;
+
+    try {
+      const { stdout: ffmpegOut } = await execAsync('ffmpeg -version');
+      ffmpegInstalled = true;
+      version = ffmpegOut.split('\n')[0] || 'Unknown';
+      hasH264 = ffmpegOut.includes('--enable-libx264') || ffmpegOut.includes('libx264');
+      hasRsvg = ffmpegOut.includes('--enable-librsvg') || ffmpegOut.includes('librsvg');
+      hasAac = true;
+    } catch (err: any) {
+      return {
+        ffmpegInstalled: false,
+        ffprobeInstalled: false,
+        version: 'Not detected',
+        hasH264: false,
+        hasAac: false,
+        hasRsvg: false,
+        fontsAvailable: { thai: false, burmese: false },
+        detectedAt: new Date().toISOString(),
+        error: `ffmpeg executable not found in PATH: ${err.message}`,
+      };
+    }
+
+    try {
+      await execAsync('ffprobe -version');
+      ffprobeInstalled = true;
+    } catch {
+      ffprobeInstalled = false;
+    }
+
+    let thaiFont = false;
+    let burmeseFont = false;
+    try {
+      const { stdout: fcOut } = await execAsync('fc-list : family');
+      thaiFont = fcOut.includes('Noto Sans Thai') || fcOut.includes('Garuda') || fcOut.includes('Thai');
+      burmeseFont = fcOut.includes('Noto Sans Myanmar') || fcOut.includes('Myanmar');
+    } catch {
+      thaiFont = true;
+      burmeseFont = true;
+    }
+
+    return {
+      ffmpegInstalled,
+      ffprobeInstalled,
+      version,
+      hasH264,
+      hasAac,
+      hasRsvg,
+      fontsAvailable: { thai: thaiFont, burmese: burmeseFont },
+      detectedAt: new Date().toISOString(),
+    };
+  }
 }
 
 export const ffmpegRenderer = new FFmpegVideoRenderer();

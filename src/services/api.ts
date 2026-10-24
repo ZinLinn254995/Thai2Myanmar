@@ -163,14 +163,57 @@ export const api = {
     return data.data;
   },
 
-  async updateChecklist(postId: string, item: string, value: boolean, realPostUrl?: string): Promise<ScheduledPost> {
+  async updateChecklist(postId: string, item: string, value: boolean): Promise<ScheduledPost> {
     const res = await fetch(`${API_BASE}/publish/checklist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ postId, item, value, realPostUrl }),
+      body: JSON.stringify({ postId, item, value }),
     });
     const data = await res.json();
+    if (!data.success) throw new Error(data.error);
     return data.data;
+  },
+
+  async confirmPublication(params: {
+    postId: string;
+    confirmationMethod: 'validated_url' | 'manual_declaration';
+    postUrl?: string;
+    confirmedByOperator: boolean;
+    confirmationNotes?: string;
+  }): Promise<ScheduledPost> {
+    const res = await fetch(`${API_BASE}/publish/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+
+  async revertPublication(postId: string): Promise<ScheduledPost> {
+    const res = await fetch(`${API_BASE}/publish/revert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return data.data;
+  },
+
+  async getFFmpegStatus(): Promise<{ success: boolean; data: any }> {
+    const res = await fetch(`${API_BASE}/system/ffmpeg-status`);
+    return res.json();
+  },
+
+  async testVoiceEngine(language: 'th-TH' | 'my-MM' = 'th-TH'): Promise<{ success: boolean; data: any }> {
+    const res = await fetch(`${API_BASE}/voice/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language }),
+    });
+    return res.json();
   },
 
   // Scheduler & Automation
