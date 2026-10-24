@@ -1,4 +1,14 @@
 import { GoogleGenAI } from '@google/genai';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const AUDIO_DIR = path.join(DATA_DIR, 'audio');
+
+if (!fs.existsSync(AUDIO_DIR)) {
+  fs.mkdirSync(AUDIO_DIR, { recursive: true });
+}
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -14,60 +24,31 @@ export interface VoiceGenerationRequest {
   language: 'th-TH' | 'my-MM';
   voiceStyle?: string;
   speed?: number;
+  allowPreviewFallback?: boolean;
 }
 
 export interface VoiceGenerationResult {
-  audioBase64: string;
+  audioBase64: string | null;
   mimeType: string;
   durationSec: number;
   engineUsed: string;
   isRealGenerated: boolean;
-}
-
-/**
- * Creates a valid synthetic PCM WAV audio buffer with gentle tone beeps/chimes for fallback/preview
- */
-function createSyntheticWav(durationSec: number, freq = 440): Buffer {
-  const sampleRate = 22050;
-  const numSamples = Math.floor(sampleRate * durationSec);
-  const dataSize = numSamples * 2; // 16-bit mono
-  const buffer = Buffer.alloc(44 + dataSize);
-
-  // RIFF header
-  buffer.write('RIFF', 0);
-  buffer.writeUInt32LE(36 + dataSize, 4);
-  buffer.write('WAVE', 8);
-  buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16); // subchunk1 size
-  buffer.writeUInt16LE(1, 20);  // PCM format
-  buffer.writeUInt16LE(1, 22);  // 1 channel (mono)
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * 2, 28); // byte rate
-  buffer.writeUInt16LE(2, 32);  // block align
-  buffer.writeUInt16LE(16, 34); // bits per sample
-  buffer.write('data', 36);
-  buffer.writeUInt32LE(dataSize, 40);
-
-  // Generate pleasant harmonic carrier tones with decay
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const envelope = Math.exp(-t * 2);
-    const sample = Math.sin(2 * Math.PI * freq * t) * envelope * 0.4;
-    const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
-    buffer.writeInt16LE(intSample, 44 + i * 2);
-  }
-
-  return buffer;
+  audioFilePath?: string;
+  error?: string | null;
 }
 
 export class VoiceService {
   private hasKey(): boolean {
-    return Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY');
+    return Boolean(
+      process.env.GEMINI_API_KEY && 
+      process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' &&
+      process.env.GEMINI_API_KEY.length > 5
+    );
   }
 
   /**
-   * Generates audio for Thai or Myanmar text.
-   * Uses Gemini 3.8 Flash Lite TTS if key is active, or high-fidelity synthesized audio adapter.
+   * Generates genuine speech audio for Thai or Myanmar text using configured Gemini 3.8 Flash Lite TTS.
+   * Never silently substitutes beeps as real narration.
    */
   async generateSpeech(params: VoiceGenerationRequest): Promise<VoiceGenerationResult> {
     const text = (params.text || '').trim();
@@ -75,10 +56,10 @@ export class VoiceService {
       throw new Error('Text parameter is required for voice generation.');
     }
 
-    // Rough duration estimation: ~4 syllables per second
     const charCount = text.length;
-    const estimatedDuration = Math.max(1.8, Math.min(18.0, charCount * 0.14));
+    const estimatedDuration = Math.max(1.8, Math.min(25.0, charCount * 0.14));
 
+    // 1. Try configured Google Gemini 3.8 Flash Lite TTS
     if (this.hasKey()) {
       try {
         const response = await ai.models.generateContent({
@@ -91,8 +72,8 @@ export class VoiceService {
                   text: text,
                   speechMetadata: {
                     style: params.language === 'th-TH' 
-                      ? 'Authentic polite native Thai speaker, clear tone distinction' 
-                      : 'Clear, encouraging Myanmar language teacher',
+                      ? 'Authentic, clear native Thai speaker, polite tone with exact vowel lengths' 
+                      : 'Encouraging, articulate native Burmese language teacher',
                   },
                 },
               ],
@@ -112,29 +93,43 @@ export class VoiceService {
 
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (base64Audio) {
+          const buffer = Buffer.from(base64Audio, 'base64');
+          const hash = crypto.createHash('md5').update(text + params.language).digest('hex');
+          const audioFilePath = path.join(AUDIO_DIR, `${hash}.wav`);
+          fs.writeFileSync(audioFilePath, buffer);
+
           return {
             audioBase64: base64Audio,
             mimeType: 'audio/wav',
             durationSec: estimatedDuration,
             engineUsed: 'gemini-3.8-flash-lite-tts',
             isRealGenerated: true,
+            audioFilePath,
+            error: null,
           };
         }
       } catch (err: any) {
-        console.warn('Gemini TTS call fallback (will use synthesized preview):', err?.message || err);
+        console.warn('Gemini 3.8 Flash Lite TTS call failed:', err?.message || err);
+        return {
+          audioBase64: null,
+          mimeType: 'audio/wav',
+          durationSec: estimatedDuration,
+          engineUsed: 'failed',
+          isRealGenerated: false,
+          error: `Gemini TTS API error: ${err.message || 'API request failed'}. Please verify quota and attached GEMINI_API_KEY.`,
+        };
       }
     }
 
-    // High fidelity synthetic audio preview buffer with frequency tailored to language
-    const freq = params.language === 'th-TH' ? 520 : 440;
-    const wavBuffer = createSyntheticWav(estimatedDuration, freq);
-
+    // 2. If API Key is missing: Return explicit failure status
+    // NEVER fake it or pretend beeps are successful voice narration!
     return {
-      audioBase64: wavBuffer.toString('base64'),
+      audioBase64: null,
       mimeType: 'audio/wav',
       durationSec: estimatedDuration,
-      engineUsed: 'Audio Synthesis Adapter (Web Audio/TTS ready)',
+      engineUsed: 'unconfigured',
       isRealGenerated: false,
+      error: 'GEMINI_API_KEY is not configured on the server. Please attach a valid Gemini API key in AI Studio Secrets to generate real voice tracks.',
     };
   }
 }

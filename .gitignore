@@ -2,7 +2,13 @@ node_modules/
 build/
 dist/
 coverage/
+bun.lock
 .DS_Store
 *.log
 .env*
 !.env.example
+data/*.sqlite*
+data/audio/*
+data/videos/*
+data/temp_render/*
+data/tmp/*

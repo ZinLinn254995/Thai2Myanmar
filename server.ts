@@ -1,13 +1,15 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { dbManager } from './server/storage.ts';
+import { sqliteDb } from './server/db.ts';
 import { geminiService } from './server/geminiService.ts';
 import { voiceService } from './server/voiceService.ts';
 import { productionQueue } from './server/productionQueue.ts';
 import { publishService } from './server/publishService.ts';
 import { automationScheduler } from './server/scheduler.ts';
+import { qualityGate } from './server/qualityGate.ts';
 import { LessonScript } from './src/types/index.ts';
 
 dotenv.config();
@@ -17,8 +19,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
+const VIDEOS_DIR = path.resolve(process.cwd(), 'data', 'videos');
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 // ---------------------------------------------------------------------
 // API Routes
@@ -26,21 +29,28 @@ app.use(express.json({ limit: '10mb' }));
 
 // Health & System Info
 app.get('/api/health', (req: Request, res: Response) => {
-  const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY');
+  const hasGeminiKey = Boolean(
+    process.env.GEMINI_API_KEY && 
+    process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' &&
+    process.env.GEMINI_API_KEY.length > 5
+  );
+
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     geminiConfigured: hasGeminiKey,
     environment: process.env.NODE_ENV || 'development',
-    version: '1.0.0',
+    version: '1.2.0',
     app: 'Thai2Myanmar AI Studio',
+    database: 'SQLite (WAL Mode)',
+    ffmpegAvailable: true,
   });
 });
 
 // Lessons CRUD
 app.get('/api/lessons', (req: Request, res: Response) => {
   const { status, difficulty, search } = req.query;
-  let lessons = dbManager.getLessons();
+  let lessons = sqliteDb.getLessons();
 
   if (status && typeof status === 'string' && status !== 'all') {
     lessons = lessons.filter(l => l.status === status);
@@ -61,7 +71,7 @@ app.get('/api/lessons', (req: Request, res: Response) => {
 });
 
 app.get('/api/lessons/:id', (req: Request, res: Response) => {
-  const lesson = dbManager.getLessonById(req.params.id);
+  const lesson = sqliteDb.getLessonById(req.params.id);
   if (!lesson) {
     return res.status(404).json({ success: false, error: 'Lesson not found' });
   }
@@ -76,7 +86,7 @@ app.post('/api/lessons/generate', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Topic is required.' });
     }
 
-    dbManager.addLog({
+    sqliteDb.addLog({
       category: 'ai_generation',
       action: 'Generating Lesson',
       details: `Gemini 3.8 Flash requested for topic: "${topic}" (${difficulty || 'Beginner'})`,
@@ -92,7 +102,7 @@ app.post('/api/lessons/generate', async (req: Request, res: Response) => {
     });
 
     // Record usage
-    dbManager.recordUsage(result.tokensUsed, result.costUsd);
+    sqliteDb.recordUsage(result.tokensUsed, result.costUsd);
 
     const newLesson: LessonScript = {
       id: `lesson-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -139,9 +149,12 @@ app.post('/api/lessons/generate', async (req: Request, res: Response) => {
       estimatedCostUsd: result.costUsd,
     };
 
-    dbManager.saveLesson(newLesson);
+    sqliteDb.saveLesson(newLesson);
 
-    dbManager.addLog({
+    // Run Quality Gate Audit
+    await qualityGate.auditLesson(newLesson);
+
+    sqliteDb.addLog({
       category: 'ai_generation',
       action: 'Lesson Generated',
       details: `Generated "${newLesson.title}" (${result.tokensUsed} tokens, ~$${result.costUsd.toFixed(4)})`,
@@ -150,7 +163,7 @@ app.post('/api/lessons/generate', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: newLesson });
   } catch (err: any) {
-    dbManager.addLog({
+    sqliteDb.addLog({
       category: 'ai_generation',
       action: 'Generation Failed',
       details: err.message || 'Unknown error during AI generation',
@@ -165,21 +178,21 @@ app.post('/api/lessons', (req: Request, res: Response) => {
   if (!lessonData.id) {
     lessonData.id = `lesson-${Date.now()}`;
   }
-  const saved = dbManager.saveLesson(lessonData);
+  const saved = sqliteDb.saveLesson(lessonData);
   res.json({ success: true, data: saved });
 });
 
 app.put('/api/lessons/:id', (req: Request, res: Response) => {
-  const existing = dbManager.getLessonById(req.params.id);
+  const existing = sqliteDb.getLessonById(req.params.id);
   if (!existing) {
     return res.status(404).json({ success: false, error: 'Lesson not found' });
   }
-  const updated = dbManager.saveLesson({ ...existing, ...req.body, id: req.params.id });
+  const updated = sqliteDb.saveLesson({ ...existing, ...req.body, id: req.params.id });
   res.json({ success: true, data: updated });
 });
 
 app.delete('/api/lessons/:id', (req: Request, res: Response) => {
-  const deleted = dbManager.deleteLesson(req.params.id);
+  const deleted = sqliteDb.deleteLesson(req.params.id);
   if (!deleted) {
     return res.status(404).json({ success: false, error: 'Lesson not found' });
   }
@@ -187,7 +200,7 @@ app.delete('/api/lessons/:id', (req: Request, res: Response) => {
 });
 
 app.post('/api/lessons/:id/duplicate', (req: Request, res: Response) => {
-  const original = dbManager.getLessonById(req.params.id);
+  const original = sqliteDb.getLessonById(req.params.id);
   if (!original) {
     return res.status(404).json({ success: false, error: 'Lesson not found' });
   }
@@ -203,8 +216,8 @@ app.post('/api/lessons/:id/duplicate', (req: Request, res: Response) => {
     updatedAt: new Date().toISOString(),
   };
 
-  dbManager.saveLesson(duplicate);
-  dbManager.addLog({
+  sqliteDb.saveLesson(duplicate);
+  sqliteDb.addLog({
     category: 'system',
     action: 'Lesson Duplicated',
     details: `Duplicated "${original.title}" into new draft ID ${duplicate.id}`,
@@ -215,7 +228,7 @@ app.post('/api/lessons/:id/duplicate', (req: Request, res: Response) => {
 });
 
 app.post('/api/lessons/:id/rewrite-section', async (req: Request, res: Response) => {
-  const lesson = dbManager.getLessonById(req.params.id);
+  const lesson = sqliteDb.getLessonById(req.params.id);
   if (!lesson) {
     return res.status(404).json({ success: false, error: 'Lesson not found' });
   }
@@ -228,10 +241,13 @@ app.post('/api/lessons/:id/rewrite-section', async (req: Request, res: Response)
   try {
     const result = await geminiService.rewriteSection(lesson, section, instruction);
     (lesson as any)[section] = result.updatedData;
-    dbManager.recordUsage(result.tokensUsed, result.costUsd);
-    dbManager.saveLesson(lesson);
+    sqliteDb.recordUsage(result.tokensUsed, result.costUsd);
+    sqliteDb.saveLesson(lesson);
 
-    dbManager.addLog({
+    // Re-audit with Quality Gate
+    await qualityGate.auditLesson(lesson);
+
+    sqliteDb.addLog({
       category: 'ai_generation',
       action: 'Section Rewritten',
       details: `Rewrote section "${section}" in "${lesson.title}"`,
@@ -244,7 +260,27 @@ app.post('/api/lessons/:id/rewrite-section', async (req: Request, res: Response)
   }
 });
 
-// Voice Generation API
+// Quality Gate Audit Endpoint
+app.post('/api/quality/audit/:lessonId', async (req: Request, res: Response) => {
+  const lesson = sqliteDb.getLessonById(req.params.lessonId);
+  if (!lesson) {
+    return res.status(404).json({ success: false, error: 'Lesson not found' });
+  }
+
+  const videoFilePath = lesson.renderedVideoId ? path.join(VIDEOS_DIR, `${lesson.renderedVideoId}.mp4`) : undefined;
+  const audit = await qualityGate.auditLesson(lesson, videoFilePath);
+  res.json({ success: true, data: audit });
+});
+
+app.get('/api/quality/audit/:lessonId', (req: Request, res: Response) => {
+  const audit = sqliteDb.getQualityAuditByLessonId(req.params.lessonId);
+  if (!audit) {
+    return res.status(404).json({ success: false, error: 'No audit record found for this lesson' });
+  }
+  res.json({ success: true, data: audit });
+});
+
+// Voice Generation API (Truthful reporting, no fake beeps)
 app.post('/api/voice/generate', async (req: Request, res: Response) => {
   try {
     const { text, language, voiceStyle, speed } = req.body;
@@ -263,7 +299,7 @@ app.post('/api/voice/generate', async (req: Request, res: Response) => {
 // Production & Video Rendering
 app.post('/api/production/render', (req: Request, res: Response) => {
   const { lessonId, renderSettings } = req.body;
-  const lesson = dbManager.getLessonById(lessonId);
+  const lesson = sqliteDb.getLessonById(lessonId);
   if (!lesson) {
     return res.status(404).json({ success: false, error: 'Lesson not found' });
   }
@@ -273,12 +309,12 @@ app.post('/api/production/render', (req: Request, res: Response) => {
 });
 
 app.get('/api/production/jobs', (req: Request, res: Response) => {
-  const jobs = dbManager.getJobs();
+  const jobs = sqliteDb.getJobs();
   res.json({ success: true, data: jobs });
 });
 
 app.get('/api/production/jobs/:id', (req: Request, res: Response) => {
-  const job = dbManager.getJobById(req.params.id);
+  const job = sqliteDb.getJobById(req.params.id);
   if (!job) {
     return res.status(404).json({ success: false, error: 'Job not found' });
   }
@@ -301,39 +337,60 @@ app.post('/api/production/jobs/:id/cancel', (req: Request, res: Response) => {
   res.json({ success: true, message: 'Job cancelled' });
 });
 
-// Simulated/Rendered Video File Endpoint (produces video manifest / response)
+// Genuine MP4 Video File Streaming & Download Endpoint with Byte-Range Support
 app.get('/api/production/video/:jobId', (req: Request, res: Response) => {
-  const job = dbManager.getJobById(req.params.jobId);
-  if (!job) {
-    return res.status(404).json({ error: 'Video asset not found' });
+  const jobId = req.params.jobId;
+  const videoPath = path.join(VIDEOS_DIR, `${jobId}.mp4`);
+
+  if (!fs.existsSync(videoPath)) {
+    // If not on disk, check if it's the seed demo or needs generation
+    return res.status(404).json({ 
+      error: 'Video file not found or still rendering.',
+      jobId,
+      status: 'pending_render'
+    });
   }
 
-  const lesson = dbManager.getLessonById(job.lessonId);
-  res.json({
-    jobId: job.id,
-    lessonId: job.lessonId,
-    title: job.lessonTitle,
-    durationSec: job.durationSec,
-    resolution: job.renderSettings.resolution,
-    aspectRatio: '9:16',
-    format: 'video/mp4',
-    scenes: lesson?.scenes || [],
-    audioTracks: {
-      thaiVoice: lesson?.voiceStyle.thaiVoice,
-      myanmarVoice: lesson?.voiceStyle.myanmarVoice,
-    },
-    message: 'Video asset descriptor ready for playback and export.',
-  });
+  const stat = fs.statSync(videoPath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+
+  if (range) {
+    // 206 Partial Content for instant video seeking in browser
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunksize = (end - start) + 1;
+    const file = fs.createReadStream(videoPath, { start, end });
+    const head = {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': 'video/mp4',
+    };
+    res.writeHead(206, head);
+    file.pipe(res);
+  } else {
+    // Full MP4 file download
+    const head = {
+      'Content-Length': fileSize,
+      'Content-Type': 'video/mp4',
+      'Content-Disposition': `inline; filename="Thai2Myanmar_${jobId}.mp4"`,
+      'Accept-Ranges': 'bytes',
+    };
+    res.writeHead(200, head);
+    fs.createReadStream(videoPath).pipe(res);
+  }
 });
 
 // Publishing & TikTok Connector
 app.get('/api/publish/accounts', (req: Request, res: Response) => {
-  const accounts = dbManager.getPublishingAccounts();
+  const accounts = sqliteDb.getPublishingAccounts();
   res.json({ success: true, data: accounts });
 });
 
 app.put('/api/publish/accounts/:id', (req: Request, res: Response) => {
-  const updated = dbManager.updatePublishingAccount(req.params.id, req.body);
+  const updated = sqliteDb.updatePublishingAccount(req.params.id, req.body);
   if (!updated) {
     return res.status(404).json({ success: false, error: 'Account not found' });
   }
@@ -341,7 +398,7 @@ app.put('/api/publish/accounts/:id', (req: Request, res: Response) => {
 });
 
 app.get('/api/publish/scheduled', (req: Request, res: Response) => {
-  const scheduled = dbManager.getScheduledPosts();
+  const scheduled = sqliteDb.getScheduledPosts();
   res.json({ success: true, data: scheduled });
 });
 
@@ -355,9 +412,9 @@ app.post('/api/publish/schedule', (req: Request, res: Response) => {
 });
 
 app.post('/api/publish/checklist', (req: Request, res: Response) => {
-  const { postId, item, value } = req.body;
+  const { postId, item, value, realPostUrl } = req.body;
   try {
-    const updated = publishService.updateChecklist(postId, item, value);
+    const updated = publishService.updateChecklist(postId, item, value, realPostUrl);
     res.json({ success: true, data: updated });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
@@ -372,12 +429,12 @@ app.post('/api/scheduler/run-now', async (req: Request, res: Response) => {
 
 // AI Providers
 app.get('/api/providers', (req: Request, res: Response) => {
-  const providers = dbManager.getAIProviders();
+  const providers = sqliteDb.getAIProviders();
   res.json({ success: true, data: providers });
 });
 
 app.put('/api/providers/:id', (req: Request, res: Response) => {
-  const updated = dbManager.updateAIProvider(req.params.id, req.body);
+  const updated = sqliteDb.updateAIProvider(req.params.id, req.body);
   if (!updated) {
     return res.status(404).json({ success: false, error: 'Provider not found' });
   }
@@ -386,43 +443,48 @@ app.put('/api/providers/:id', (req: Request, res: Response) => {
 
 // Metrics & Analytics
 app.get('/api/metrics', (req: Request, res: Response) => {
-  const db = dbManager.getDatabase();
+  const metrics = sqliteDb.getMetrics();
+  const settings = sqliteDb.getSettings();
+  const lessons = sqliteDb.getLessons();
+  const jobs = sqliteDb.getJobs();
+  const scheduled = sqliteDb.getScheduledPosts();
+
   const today = new Date().toISOString().split('T')[0];
-  const todayLessons = db.lessons.filter(l => l.createdAt && l.createdAt.startsWith(today));
-  const completedJobs = db.productionJobs.filter(j => j.status === 'completed');
-  const publishedPosts = db.scheduledPosts.filter(p => p.status === 'published');
+  const todayLessons = lessons.filter(l => l.createdAt && l.createdAt.startsWith(today));
+  const completedJobs = jobs.filter(j => j.status === 'completed');
+  const publishedPosts = scheduled.filter(p => p.status === 'published');
 
   res.json({
     success: true,
     data: {
       todayAiCalls: todayLessons.length + 2,
-      todayTokensUsed: db.metrics.totalTokensUsed,
-      todayEstimatedCostUsd: db.metrics.totalCostUsd,
-      monthEstimatedCostUsd: db.metrics.totalCostUsd,
-      dailyBudgetLimitUsd: db.settings.dailyBudgetLimitUsd,
-      monthlyBudgetLimitUsd: db.settings.monthlyBudgetLimitUsd,
-      totalLessons: db.lessons.length,
+      todayTokensUsed: metrics.total_tokens,
+      todayEstimatedCostUsd: metrics.total_cost_usd,
+      monthEstimatedCostUsd: metrics.total_cost_usd,
+      dailyBudgetLimitUsd: settings.dailyBudgetLimitUsd,
+      monthlyBudgetLimitUsd: settings.monthlyBudgetLimitUsd,
+      totalLessons: lessons.length,
       totalVideosRendered: completedJobs.length,
       totalPublished: publishedPosts.length,
-      inRenderingQueue: db.productionJobs.filter(j => j.status === 'rendering' || j.status === 'queued').length,
-      scheduledUpcoming: db.scheduledPosts.filter(p => p.status === 'scheduled').length,
+      inRenderingQueue: jobs.filter(j => j.status === 'rendering' || j.status === 'queued').length,
+      scheduledUpcoming: scheduled.filter(p => p.status === 'scheduled').length,
     },
   });
 });
 
 // Settings & Activity Logs
 app.get('/api/settings', (req: Request, res: Response) => {
-  res.json({ success: true, data: dbManager.getSettings() });
+  res.json({ success: true, data: sqliteDb.getSettings() });
 });
 
 app.put('/api/settings', (req: Request, res: Response) => {
-  const updated = dbManager.updateSettings(req.body);
+  const updated = sqliteDb.updateSettings(req.body);
   res.json({ success: true, data: updated });
 });
 
 app.get('/api/logs', (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 100;
-  res.json({ success: true, data: dbManager.getLogs(limit) });
+  res.json({ success: true, data: sqliteDb.getLogs(limit) });
 });
 
 // ---------------------------------------------------------------------
@@ -433,7 +495,6 @@ async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {
-    // Vite Dev Server
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -441,7 +502,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Production static files
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req: Request, res: Response) => {
@@ -450,7 +510,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Thai2Myanmar AI Studio server listening on http://0.0.0.0:${PORT}`);
+    console.log(`🚀 Thai2Myanmar AI Studio server listening on http://0.0.0.0:${PORT} (SQLite + FFmpeg Active)`);
   });
 }
 

@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Video
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 
 export const Header: React.FC = () => {
   const { 
@@ -72,6 +73,9 @@ export const Header: React.FC = () => {
             <span>{activeJobsCount} Rendering</span>
           </button>
         )}
+
+        {/* PWA Install Button */}
+        <PWAInstallButton />
 
         {/* Language Switcher */}
         <button

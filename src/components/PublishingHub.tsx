@@ -41,13 +41,15 @@ export const PublishingHub: React.FC = () => {
     showToast(`${label} Copy ကူးယူပြီးပါပြီ (Copied to clipboard)`, 'success');
   };
 
+  const [realUrlInput, setRealUrlInput] = useState('');
+
   const handleToggleChecklist = async (postId: string, item: keyof ScheduledPost['checklist'], currentVal: boolean) => {
     try {
-      const updated = await api.updateChecklist(postId, item, !currentVal);
+      const updated = await api.updateChecklist(postId, item, !currentVal, realUrlInput.trim() || undefined);
       setSelectedPost(updated);
       await refreshData();
       if (item === 'manualUploadCompleted' && !currentVal) {
-        showToast('TikTok Post တင်ပြီးကြောင်း အတည်ပြုပြီးပါပြီ! (Marked as Published)', 'success');
+        showToast('TikTok Post တင်ပြီးကြောင်း အတည်ပြုပြီးပါပြီ! (Truthfully Marked as Published)', 'success');
       }
     } catch (err: any) {
       showToast(err.message || 'Checklist update failed', 'error');
@@ -302,11 +304,44 @@ export const PublishingHub: React.FC = () => {
                 </div>
               </div>
 
+              {/* Real URL input when completing upload */}
+              {!selectedPost.checklist.manualUploadCompleted && (
+                <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
+                  <label className="text-[11px] font-bold text-slate-300 block">
+                    TikTok Post URL (ရရှိလာသော အမှန်တကယ် Post Link ထည့်သွင်းပါ - Optional):
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://www.tiktok.com/@thai2myanmar_jp/video/..."
+                    value={realUrlInput}
+                    onChange={(e) => setRealUrlInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+                  />
+                  <span className="text-[10px] text-slate-400 block">
+                    Never fabricated. If left blank, it is truthfully marked as "Manual Package Uploaded".
+                  </span>
+                </div>
+              )}
+
               {/* Status summary */}
               {selectedPost.checklist.manualUploadCompleted && (
-                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-2 text-xs text-emerald-300 font-medium">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Post marked as Published on TikTok Japan (@thai2myanmar_jp). Status updated in database.</span>
+                <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-1.5 text-xs text-emerald-300">
+                  <div className="flex items-center gap-2 font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Post marked as Published on TikTok Japan (@thai2myanmar_jp).</span>
+                  </div>
+                  {selectedPost.publishedPostUrl ? (
+                    <div className="pl-6 text-[11px] flex items-center gap-1 font-mono text-cyan-400">
+                      <span>Real URL:</span>
+                      <a href={selectedPost.publishedPostUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-white truncate">
+                        {selectedPost.publishedPostUrl}
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="pl-6 text-[11px] text-slate-300">
+                      Mode: Manually Uploaded via 1-Click Verification Package.
+                    </div>
+                  )}
                 </div>
               )}
             </div>

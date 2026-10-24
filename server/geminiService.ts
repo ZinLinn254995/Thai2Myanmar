@@ -1,7 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { LessonScript, DifficultyLevel, VideoScene } from '../src/types/index.ts';
 
-// Server-side initialization following @google/genai guidelines
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
@@ -22,51 +21,63 @@ export interface GenerateLessonParams {
 
 export class GeminiService {
   private hasKey(): boolean {
-    return Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY');
+    return Boolean(
+      process.env.GEMINI_API_KEY && 
+      process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' &&
+      process.env.GEMINI_API_KEY.length > 5
+    );
   }
 
   /**
-   * Generates a complete, structured Thai-to-Myanmar lesson optimized for TikTok vertical video.
+   * Generates a complete, structured Thai-to-Myanmar lesson with strict pedagogical accuracy.
    */
   async generateLesson(params: GenerateLessonParams): Promise<{ lesson: Partial<LessonScript>; tokensUsed: number; costUsd: number }> {
-    const targetDuration = params.targetDurationSec || 65; // Default 65s for TikTok Creator Rewards
+    const targetDuration = params.targetDurationSec || 65; // Minimum 60s for TikTok Creator Rewards
     const difficulty = params.difficulty || 'Beginner';
     const topic = params.topic || 'Essential Daily Conversation';
 
     if (!this.hasKey()) {
-      throw new Error('GEMINI_API_KEY is not configured on the server. Please ensure your API key is attached in the AI Studio environment.');
+      throw new Error('GEMINI_API_KEY is not configured on the server. Please attach a valid API key in AI Studio secrets.');
     }
 
-    const systemPrompt = `You are a Master Bilingual Thai-Myanmar Language Teacher, Pedagogical Linguist, and TikTok Content Production Specialist.
-Your mission is to craft highly engaging, linguistically accurate Thai language learning scripts designed for Myanmar learners and Burmese expatriates (including those living in Thailand or Japan).
+    const systemPrompt = `You are a Master Bilingual Thai-Burmese Pedagogical Linguist and Viral TikTok Content Architect.
+Your mission is to produce original, high-accuracy Thai language learning video scripts specifically designed for Burmese-speaking learners, expatriates in Thailand, and Myanmar workers in Japan.
 
-Requirements:
-1. Thai Script: Must be authentic, modern Thai spelling (e.g. สวัสดี, ขอบคุณ, อันนี้เท่าไหร่).
-2. Romanization: Standard clear phonetic transcription (Paiboon / RTGS style).
-3. Burmese Pronunciation (မြန်မာအသံထွက်): Accurate Burmese phonetic transcription with tones and stop consonants (e.g. ครับ -> "ခပ် / ခရတ်ပ်", ค่ะ -> "ခါ", ขอบคุณ -> "ခေါ့ပ်-ခွန်း", เท่าไหร่ -> "ထောင်း-ရိုင်း").
-4. Burmese Translation (မြန်မာဘာသာပြန်): Natural, everyday Myanmar language.
-5. High-Retention TikTok Hook: Designed to grab viewer attention in the first 3 seconds (addressing common mispronunciations, cultural nuances, or practical survival hacks).
-6. Total video duration must be between 60 to 75 seconds to qualify for TikTok Creator Rewards Program.
-7. Break into exactly 5 Scenes for 9:16 vertical video production:
-   - Scene 1: Hook & Viral Problem (7-10s)
-   - Scene 2: Core Vocabulary & Tones (18-22s)
-   - Scene 3: Realistic Everyday Dialogue (16-20s)
-   - Scene 4: Quick Interactive Practice Quiz (10-14s)
-   - Scene 5: Outro & Call To Action (Follow / Save) (8-10s)
+CRITICAL PEDAGOGICAL LINGUISTIC RULES:
+1. Authentic Thai Script: Must use correct modern Thai spelling and vowel placement (e.g., สวัสดี, ขอบคุณ, อันนี้เท่าไหร่, ช่วยด้วย).
+2. Phonetic Romanization: Use consistent Paiboon/RTGS style with tone marks.
+3. Burmese Pronunciation Guide (မြန်မာအသံထွက်):
+   - Transcribe accurately using Burmese consonants, vowels, and final stop consonants (-k က်, -t တ်/ဒ်, -p ပ်, -m မ်, -n န်, -ng င်).
+   - Tone distinctions MUST be described clearly:
+     * Mid tone (ဖြောင့်သံ - e.g., စဝတ်ဒီ)
+     * Low tone (အောက်စိုက်သံ - e.g., ခေါ့ပ်)
+     * Falling tone (မြင့်ကျသံ - e.g., လွတ်ဒ်, နီး)
+     * High tone (မြင့်သံ - e.g., ရူး)
+     * Rising tone (နိမ့်တက်သံ - e.g., မိုင်း, ခေါဝ်)
+   - Explain polite particles: အမျိုးသားသုံး (ครับ - ခပ်/ခရတ်ပ်) vs အမျိုးသမီးသုံး (ค่ะ/คะ - ခါ/ခ)။
+4. Burmese Translation (မြန်မာဘာသာပြန်): Natural, respectful everyday Myanmar language.
+5. 3-Second Viral Hook: First 3 seconds must arrest TikTok viewers' attention by spotlighting an embarrassing pronunciation mistake, a shopping bargain secret, or an essential survival phrase.
+6. Target Duration: Total video duration MUST BE between 60 and 75 seconds (meeting the >60s requirement for TikTok Creator Rewards).
+7. Break into EXACTLY 5 Scenes for 9:16 Vertical Video:
+   - Scene 1: Hook & Problem (7-10s)
+   - Scene 2: Core Vocabulary & Phonetic Tones (18-22s)
+   - Scene 3: Everyday Real-life Dialogue (16-20s)
+   - Scene 4: Interactive Quiz & Engagement (10-14s)
+   - Scene 5: Outro & Call-To-Action (Follow & Save) (8-10s)
 
-Output strictly valid JSON matching this structure:
+Output strictly valid JSON matching this schema:
 {
-  "title": "Short catchy Myanmar title",
+  "title": "Clear catchy Myanmar title (မြန်မာခေါင်းစဉ်)",
   "topic": "${topic}",
   "difficulty": "${difficulty}",
   "targetDurationSec": ${targetDuration},
   "category": "${params.category || 'Daily Conversation'}",
-  "objectiveMm": "Clear objective in Myanmar",
+  "objectiveMm": "Clear educational objective in Myanmar",
   "hook": {
-    "hookThai": "Thai hook line",
+    "hookThai": "Authentic Thai hook line",
     "hookRoman": "Romanized hook",
-    "hookMm": "Catchy Myanmar hook for TikTok",
-    "retentionAngle": "Why this hook works"
+    "hookMm": "Catchy Burmese hook for TikTok",
+    "retentionAngle": "Why this hook stops the scroll"
   },
   "vocabulary": [
     {
@@ -74,8 +85,8 @@ Output strictly valid JSON matching this structure:
       "roman": "...",
       "myanmarPronounce": "...",
       "myanmarMeaning": "...",
-      "toneDescription": "Low/Mid/High/Falling/Rising",
-      "usageTip": "Usage tip in Myanmar"
+      "toneDescription": "Low / Mid / High / Falling / Rising tone",
+      "usageTip": "Usage tip & polite particles in Myanmar"
     }
   ],
   "dialogue": [
@@ -97,20 +108,20 @@ Output strictly valid JSON matching this structure:
     }
   ],
   "exercise": {
-    "questionMm": "Myanmar quiz question",
+    "questionMm": "Burmese quiz question",
     "questionThai": "Optional Thai question",
-    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+    "options": ["A: ...", "B: ...", "C: ...", "D: ..."],
     "correctAnswerIndex": 0,
-    "explanationMm": "Why this answer is correct in Myanmar"
+    "explanationMm": "Why this answer is correct in Burmese"
   },
-  "summaryMm": "Brief wrap-up in Myanmar",
-  "tiktokCaption": "Engaging TikTok caption with emojis and call to action",
-  "hashtags": ["#Thai2Myanmar", "#ထိုင်းစကားပြော", "#LearnThai", "#MyanmarInJapan", "#TikTokUni"],
-  "culturalNoteMm": "Cultural etiquette or grammar secret in Myanmar",
+  "summaryMm": "Summary in Myanmar",
+  "tiktokCaption": "Viral TikTok caption with emojis and call to action",
+  "hashtags": ["#Thai2Myanmar", "#ထိုင်းစကားပြော", "#LearnThai", "#TikTokJapan", "#MyanmarInJapan"],
+  "culturalNoteMm": "Cultural etiquette or grammar nuance in Myanmar",
   "scenes": [
     {
       "sceneNumber": 1,
-      "title": "Hook & Viral Problem",
+      "title": "Viral Hook",
       "type": "hook",
       "durationSec": 9,
       "thaiText": "...",
@@ -136,7 +147,7 @@ Output strictly valid JSON matching this structure:
     },
     {
       "sceneNumber": 3,
-      "title": "Real Context Dialogue",
+      "title": "Real Dialogue in Action",
       "type": "dialogue",
       "durationSec": 18,
       "thaiText": "...",
@@ -149,7 +160,7 @@ Output strictly valid JSON matching this structure:
     },
     {
       "sceneNumber": 4,
-      "title": "Interactive Practice Quiz",
+      "title": "Interactive Quiz Challenge",
       "type": "quiz",
       "durationSec": 12,
       "thaiText": "...",
@@ -162,7 +173,7 @@ Output strictly valid JSON matching this structure:
     },
     {
       "sceneNumber": 5,
-      "title": "Outro & Engagement CTA",
+      "title": "Outro & Call To Action",
       "type": "outro",
       "durationSec": 9,
       "thaiText": "...",
@@ -176,11 +187,11 @@ Output strictly valid JSON matching this structure:
   ]
 }`;
 
-    const userPrompt = `Create a Thai language lesson on the topic: "${topic}".
-Difficulty Level: ${difficulty}
-Target Video Duration: ${targetDuration} seconds
-${params.customInstructions ? `Additional User Instructions: ${params.customInstructions}` : ''}
-Provide exact, high-accuracy Burmese phonetics (မြန်မာအသံထွက်) so Burmese learners can speak native-like Thai.`;
+    const userPrompt = `Generate an authentic Thai lesson on topic: "${topic}".
+Difficulty: ${difficulty}
+Target Video Duration: ${targetDuration} seconds (Ensure scene durations sum to at least 65s).
+${params.customInstructions ? `Custom User Instructions: ${params.customInstructions}` : ''}
+Provide exact Burmese phonetic notation (မြန်မာအသံထွက်) with tone nuances.`;
 
     try {
       const response = await ai.models.generateContent({
@@ -196,7 +207,7 @@ Provide exact, high-accuracy Burmese phonetics (မြန်မာအသံထ�
       const rawText = response.text || '{}';
       const parsedData = JSON.parse(rawText);
 
-      // Add unique IDs to vocabulary and dialogue items if missing
+      // Add unique IDs
       if (Array.isArray(parsedData.vocabulary)) {
         parsedData.vocabulary = parsedData.vocabulary.map((v: any, i: number) => ({
           id: v.id || `v-${Date.now()}-${i}`,
@@ -210,7 +221,15 @@ Provide exact, high-accuracy Burmese phonetics (မြန်မာအသံထ�
         }));
       }
 
-      // Calculate approximate token usage and cost for Gemini 3.8 Flash ($0.15 per 1M tokens)
+      // Ensure total scene duration meets TikTok Creator Rewards >60s
+      if (Array.isArray(parsedData.scenes)) {
+        const sumDuration = parsedData.scenes.reduce((acc: number, s: any) => acc + (s.durationSec || 12), 0);
+        if (sumDuration < 60) {
+          const factor = 65 / sumDuration;
+          parsedData.scenes.forEach((s: any) => s.durationSec = Math.round((s.durationSec || 12) * factor));
+        }
+      }
+
       const estimatedTokens = Math.round((systemPrompt.length + userPrompt.length + rawText.length) / 3.8);
       const costUsd = (estimatedTokens / 1000) * 0.00015;
 
@@ -237,7 +256,7 @@ Provide exact, high-accuracy Burmese phonetics (မြန်မာအသံထ�
       throw new Error('GEMINI_API_KEY is not configured on the server.');
     }
 
-    const prompt = `You are editing a specific section of a Thai2Myanmar lesson script.
+    const prompt = `You are rewriting a specific section of a Thai2Myanmar lesson script.
 Lesson Title: "${lesson.title}"
 Topic: "${lesson.topic}"
 Difficulty: "${lesson.difficulty}"
@@ -246,7 +265,7 @@ Current Section Content: ${JSON.stringify((lesson as any)[section] || {})}
 User Instruction for this rewrite: "${instruction}"
 
 Return ONLY valid JSON with the rewritten data for this section matching the original schema of "${section}".
-Ensure Burmese phonetic accuracy (မြန်မာအသံထွက်) and tone descriptions.`;
+Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်မာအသံထွက်).`;
 
     try {
       const response = await ai.models.generateContent({

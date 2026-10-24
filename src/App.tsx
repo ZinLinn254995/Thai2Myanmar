@@ -8,6 +8,7 @@ import { AppProvider, useApp } from './context/AppContext.tsx';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
 import { ToastContainer } from './components/ToastContainer.tsx';
+import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 
 // Views
 import { Dashboard } from './components/Dashboard.tsx';
@@ -80,6 +81,7 @@ const AppContent: React.FC = () => {
         </main>
       </div>
       <ToastContainer />
+      <OfflineIndicator />
     </div>
   );
 };

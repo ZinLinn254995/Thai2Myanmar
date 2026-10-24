@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06B6D4"/>
+      <stop offset="50%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#9333EA"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#06B6D4" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Background with squircle radius -->
+  <rect width="512" height="512" rx="128" fill="#0B0F19"/>
+  <!-- Inner glowing gradient frame -->
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#grad)" filter="url(#shadow)"/>
+  <rect x="40" y="40" width="432" height="432" rx="88" fill="#0F172A" opacity="0.92"/>
+  
+  <!-- Thai & Myanmar Cultural Iconography -->
+  <g transform="translate(256, 256) scale(1.1)">
+    <!-- Video / Play polygon -->
+    <path d="M-60 -80 L80 0 L-60 80 Z" fill="url(#grad)"/>
+    <!-- Bilingual letters -->
+    <text x="-90" y="-100" font-family="'Noto Sans Thai', sans-serif" font-size="64" font-weight="900" fill="#38BDF8" text-anchor="middle">ไทย</text>
+    <text x="90" y="140" font-family="'Noto Sans Myanmar', sans-serif" font-size="54" font-weight="bold" fill="#FBBF24" text-anchor="middle">မြန်မာ</text>
+  </g>
+</svg>

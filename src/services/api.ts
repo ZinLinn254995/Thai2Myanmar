@@ -163,11 +163,11 @@ export const api = {
     return data.data;
   },
 
-  async updateChecklist(postId: string, item: string, value: boolean): Promise<ScheduledPost> {
+  async updateChecklist(postId: string, item: string, value: boolean, realPostUrl?: string): Promise<ScheduledPost> {
     const res = await fetch(`${API_BASE}/publish/checklist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ postId, item, value }),
+      body: JSON.stringify({ postId, item, value, realPostUrl }),
     });
     const data = await res.json();
     return data.data;

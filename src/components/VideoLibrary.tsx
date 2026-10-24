@@ -156,7 +156,7 @@ export const VideoLibrary: React.FC = () => {
                   )}
                 </div>
 
-                {/* Action buttons */}
+                  {/* Action buttons */}
                 <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
                   {isCompleted && (
                     <>
@@ -174,9 +174,19 @@ export const VideoLibrary: React.FC = () => {
                       </button>
 
                       <div className="flex items-center gap-1.5">
+                        <a
+                          href={`/api/production/video/${job.id}`}
+                          download={`Thai2Myanmar_${job.id}.mp4`}
+                          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-cyan-400 text-xs font-semibold flex items-center gap-1 border border-cyan-500/30 transition-colors"
+                          title="Download genuine 1080x1920 MP4 video file"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>MP4</span>
+                        </a>
+
                         <button
                           onClick={() => handleSchedulePost(job.lessonId)}
-                          className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1"
+                          className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1 shadow-sm"
                         >
                           <Share2 className="w-3.5 h-3.5" />
                           <span>Publish</span>

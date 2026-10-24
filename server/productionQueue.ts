@@ -1,15 +1,50 @@
-import { dbManager } from './storage.ts';
+import fs from 'fs';
+import path from 'path';
+import { sqliteDb } from './db.ts';
+import { ffmpegRenderer } from './ffmpegRenderer.ts';
+import { qualityGate } from './qualityGate.ts';
 import { LessonScript, ProductionJob } from '../src/types/index.ts';
 
+const VIDEOS_DIR = path.resolve(process.cwd(), 'data', 'videos');
+
 export class ProductionQueue {
-  private activeTimers: Map<string, NodeJS.Timeout> = new Map();
+  private activeJobs: Set<string> = new Set();
+
+  constructor() {
+    this.recoverInterruptedJobs();
+  }
+
+  /**
+   * On server startup, recover any jobs that were interrupted during a restart
+   */
+  private recoverInterruptedJobs() {
+    const allJobs = sqliteDb.getJobs();
+    for (const job of allJobs) {
+      if (job.status === 'rendering' || job.status === 'queued') {
+        const videoPath = path.join(VIDEOS_DIR, `${job.id}.mp4`);
+        if (fs.existsSync(videoPath)) {
+          job.status = 'completed';
+          job.progress = 100;
+          job.currentStep = 'Render verified from disk';
+          job.videoUrl = `/api/production/video/${job.id}`;
+          job.completedAt = job.completedAt || new Date().toISOString();
+          sqliteDb.saveJob(job);
+        } else {
+          // Mark as paused / recoverable
+          job.status = 'failed';
+          job.error = 'Job interrupted by server restart. Click "Retry Render" to regenerate.';
+          sqliteDb.saveJob(job);
+        }
+      }
+    }
+  }
 
   /**
    * Enqueues a lesson for video production rendering
    */
   startRenderJob(lesson: LessonScript, settings?: Partial<ProductionJob['renderSettings']>): ProductionJob {
-    const jobId = `job-render-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const duration = lesson.targetDurationSec || 64;
+    const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const duration = lesson.targetDurationSec || 65;
 
     const newJob: ProductionJob = {
       id: jobId,
@@ -31,97 +66,123 @@ export class ProductionQueue {
       startedAt: new Date().toISOString(),
     };
 
-    dbManager.saveJob(newJob);
+    sqliteDb.saveJob(newJob);
 
     // Update lesson status to 'Rendering'
     lesson.status = 'Rendering';
     lesson.renderedVideoId = jobId;
-    dbManager.saveLesson(lesson);
+    sqliteDb.saveLesson(lesson);
 
-    dbManager.addLog({
+    sqliteDb.addLog({
       category: 'video_render',
       action: 'Rendering Started',
-      details: `Enqueued Job ${jobId} for "${lesson.title}" (${duration}s, 1080x1920 9:16)`,
+      details: `Enqueued Job ${jobId} for "${lesson.title}" (${duration}s, 1080x1920 9:16 MP4)`,
       level: 'info',
     });
 
-    // Start asynchronous stage-by-stage rendering worker
-    this.runBackgroundWorker(jobId, lesson);
+    // Start background rendering execution
+    this.runWorker(jobId, lesson);
 
     return newJob;
   }
 
   /**
-   * Simulates/runs step-by-step rendering with real progress checkpoints
+   * Executes the real FFmpeg 9:16 rendering pipeline asynchronously
    */
-  private runBackgroundWorker(jobId: string, lesson: LessonScript): void {
-    const stages = [
-      { progress: 15, step: 'Decomposing 5 scenes & typography layout' },
-      { progress: 35, step: 'Calibrating Thai and Myanmar audio phonetics' },
-      { progress: 55, step: 'Generating karaoke-timed subtitles and tone badges' },
-      { progress: 80, step: 'Compositing 9:16 vertical frames with visual cards' },
-      { progress: 100, step: 'Final video packaged & optimized for TikTok' },
-    ];
+  private async runWorker(jobId: string, lesson: LessonScript): Promise<void> {
+    if (this.activeJobs.has(jobId)) return;
+    this.activeJobs.add(jobId);
 
-    let currentStageIndex = 0;
+    try {
+      const job = sqliteDb.getJobById(jobId);
+      if (!job) return;
 
-    const interval = setInterval(() => {
-      const job = dbManager.getJobById(jobId);
-      if (!job || job.status === 'cancelled') {
-        clearInterval(interval);
-        this.activeTimers.delete(jobId);
-        return;
-      }
+      job.status = 'rendering';
+      job.progress = 5;
+      job.currentStep = 'Starting FFmpeg 1080x1920 video pipeline...';
+      sqliteDb.saveJob(job);
 
-      if (currentStageIndex < stages.length) {
-        const stage = stages[currentStageIndex];
-        job.status = 'rendering';
-        job.progress = stage.progress;
-        job.currentStep = stage.step;
-        dbManager.saveJob(job);
-        currentStageIndex++;
-      } else {
-        // Complete
-        clearInterval(interval);
-        this.activeTimers.delete(jobId);
-
-        job.status = 'completed';
-        job.progress = 100;
-        job.currentStep = 'Render complete (1080x1920 9:16 Vertical MP4)';
-        job.videoUrl = `/api/production/video/${jobId}`;
-        job.downloadFilename = `Thai2Myanmar_${lesson.id.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
-        job.fileSizeBytes = Math.round(12000000 + (lesson.targetDurationSec || 60) * 85000);
-        job.completedAt = new Date().toISOString();
-        dbManager.saveJob(job);
-
-        // Update lesson status to 'Ready'
-        const currentLesson = dbManager.getLessonById(lesson.id);
-        if (currentLesson) {
-          currentLesson.status = 'Ready';
-          currentLesson.renderedVideoId = jobId;
-          dbManager.saveLesson(currentLesson);
+      // Execute genuine FFmpeg render
+      const renderResult = await ffmpegRenderer.renderLessonToMp4(
+        lesson,
+        job,
+        (progress, step) => {
+          const current = sqliteDb.getJobById(jobId);
+          if (current && current.status !== 'cancelled') {
+            current.progress = progress;
+            current.currentStep = step;
+            sqliteDb.saveJob(current);
+          }
         }
+      );
 
-        dbManager.addLog({
-          category: 'video_render',
-          action: 'Rendering Completed',
-          details: `Job ${jobId} rendered successfully. Ready for preview, download, and TikTok scheduling.`,
-          level: 'success',
-        });
+      // Probe & Audit video with Quality Gate
+      const audit = await qualityGate.auditLesson(lesson, renderResult.videoPath);
+
+      // Update job to completed
+      const completedJob = sqliteDb.getJobById(jobId);
+      if (completedJob) {
+        completedJob.status = 'completed';
+        completedJob.progress = 100;
+        completedJob.currentStep = `Render complete (1080x1920 MP4, ${renderResult.durationSec.toFixed(1)}s, Quality: ${audit.score}/100)`;
+        completedJob.durationSec = renderResult.durationSec;
+        completedJob.fileSizeBytes = renderResult.fileSizeBytes;
+        completedJob.videoUrl = `/api/production/video/${jobId}`;
+        completedJob.downloadFilename = `Thai2Myanmar_${lesson.id.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
+        completedJob.completedAt = new Date().toISOString();
+        sqliteDb.saveJob(completedJob);
       }
-    }, 1800);
 
-    this.activeTimers.set(jobId, interval);
+      // Update lesson status to 'Ready'
+      const currentLesson = sqliteDb.getLessonById(lesson.id);
+      if (currentLesson) {
+        currentLesson.status = 'Ready';
+        currentLesson.renderedVideoId = jobId;
+        sqliteDb.saveLesson(currentLesson);
+      }
+
+      sqliteDb.addLog({
+        category: 'video_render',
+        action: 'Rendering Completed',
+        details: `Job ${jobId} finished: Genuine 1080x1920 MP4 (${renderResult.durationSec.toFixed(1)}s, ${(renderResult.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB). Quality Gate: ${audit.score}%`,
+        level: 'success',
+      });
+
+    } catch (err: any) {
+      console.error(`Render job ${jobId} failed:`, err);
+      const failedJob = sqliteDb.getJobById(jobId);
+      if (failedJob) {
+        failedJob.status = 'failed';
+        failedJob.error = err.message || 'FFmpeg rendering failed';
+        failedJob.currentStep = 'Render failed: ' + (err.message || 'Unknown error');
+        sqliteDb.saveJob(failedJob);
+      }
+
+      const currentLesson = sqliteDb.getLessonById(lesson.id);
+      if (currentLesson) {
+        currentLesson.status = 'Failed';
+        sqliteDb.saveLesson(currentLesson);
+      }
+
+      sqliteDb.addLog({
+        category: 'video_render',
+        action: 'Rendering Failed',
+        details: `Job ${jobId} error: ${err.message}`,
+        level: 'error',
+      });
+    } finally {
+      this.activeJobs.delete(jobId);
+    }
   }
 
   /**
-   * Retries a failed or cancelled rendering job
+   * Retries a failed rendering job
    */
   retryJob(jobId: string): ProductionJob | null {
-    const job = dbManager.getJobById(jobId);
+    const job = sqliteDb.getJobById(jobId);
     if (!job) return null;
 
-    const lesson = dbManager.getLessonById(job.lessonId);
+    const lesson = sqliteDb.getLessonById(job.lessonId);
     if (!lesson) return null;
 
     job.status = 'queued';
@@ -130,16 +191,16 @@ export class ProductionQueue {
     job.error = null;
     job.startedAt = new Date().toISOString();
     job.completedAt = undefined;
-    dbManager.saveJob(job);
+    sqliteDb.saveJob(job);
 
-    dbManager.addLog({
+    sqliteDb.addLog({
       category: 'video_render',
       action: 'Rendering Retried',
       details: `Retrying Job ${jobId} for "${lesson.title}"`,
       level: 'info',
     });
 
-    this.runBackgroundWorker(jobId, lesson);
+    this.runWorker(jobId, lesson);
     return job;
   }
 
@@ -147,17 +208,12 @@ export class ProductionQueue {
    * Cancels an active job
    */
   cancelJob(jobId: string): boolean {
-    const timer = this.activeTimers.get(jobId);
-    if (timer) {
-      clearInterval(timer);
-      this.activeTimers.delete(jobId);
-    }
-
-    const job = dbManager.getJobById(jobId);
-    if (job) {
+    const job = sqliteDb.getJobById(jobId);
+    if (job && (job.status === 'rendering' || job.status === 'queued')) {
       job.status = 'cancelled';
       job.currentStep = 'Job cancelled by user';
-      dbManager.saveJob(job);
+      sqliteDb.saveJob(job);
+      this.activeJobs.delete(jobId);
       return true;
     }
     return false;

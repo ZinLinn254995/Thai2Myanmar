@@ -1,4 +1,4 @@
-import { dbManager } from './storage.ts';
+import { sqliteDb } from './db.ts';
 import { ScheduledPost, PublishingAccount } from '../src/types/index.ts';
 
 export class PublishService {
@@ -11,12 +11,12 @@ export class PublishService {
     scheduledTime: string;
     autoPublish?: boolean;
   }): ScheduledPost {
-    const lesson = dbManager.getLessonById(params.lessonId);
+    const lesson = sqliteDb.getLessonById(params.lessonId);
     if (!lesson) {
       throw new Error(`Lesson ${params.lessonId} not found.`);
     }
 
-    const accounts = dbManager.getPublishingAccounts();
+    const accounts = sqliteDb.getPublishingAccounts();
     const account = accounts.find(a => a.id === params.accountId) || accounts[0];
 
     const scheduledPost: ScheduledPost = {
@@ -42,13 +42,13 @@ export class PublishService {
       createdAt: new Date().toISOString(),
     };
 
-    dbManager.saveScheduledPost(scheduledPost);
+    sqliteDb.saveScheduledPost(scheduledPost);
 
     lesson.status = 'Scheduled';
     lesson.scheduledTime = params.scheduledTime;
-    dbManager.saveLesson(lesson);
+    sqliteDb.saveLesson(lesson);
 
-    dbManager.addLog({
+    sqliteDb.addLog({
       category: 'publish',
       action: 'Post Scheduled',
       details: `Scheduled "${lesson.title}" for ${account.handle} at ${new Date(params.scheduledTime).toLocaleString()}`,
@@ -59,10 +59,15 @@ export class PublishService {
   }
 
   /**
-   * Update post checklist item
+   * Update post checklist item and confirm truthful publishing status
    */
-  updateChecklist(postId: string, item: keyof ScheduledPost['checklist'], value: boolean): ScheduledPost {
-    const posts = dbManager.getScheduledPosts();
+  updateChecklist(
+    postId: string, 
+    item: keyof ScheduledPost['checklist'], 
+    value: boolean,
+    realPostUrl?: string
+  ): ScheduledPost {
+    const posts = sqliteDb.getScheduledPosts();
     const post = posts.find(p => p.id === postId);
     if (!post) {
       throw new Error(`Scheduled post ${postId} not found.`);
@@ -70,26 +75,38 @@ export class PublishService {
 
     post.checklist[item] = value;
 
-    // If manual upload completed, mark post as published
-    if (post.checklist.manualUploadCompleted) {
-      post.status = 'published';
-      post.publishedPostUrl = `https://www.tiktok.com/${post.accountHandle}/video/mock_${Date.now()}`;
+    if (item === 'manualUploadCompleted') {
+      if (value) {
+        post.status = 'published';
+        // Only set post URL if the user provides the real link; NEVER fabricate fake mock URLs
+        if (realPostUrl && realPostUrl.startsWith('http')) {
+          post.publishedPostUrl = realPostUrl;
+        }
 
-      const lesson = dbManager.getLessonById(post.lessonId);
-      if (lesson) {
-        lesson.status = 'Published';
-        dbManager.saveLesson(lesson);
+        const lesson = sqliteDb.getLessonById(post.lessonId);
+        if (lesson) {
+          lesson.status = 'Published';
+          sqliteDb.saveLesson(lesson);
+        }
+
+        sqliteDb.addLog({
+          category: 'publish',
+          action: 'Post Published (Manual Verified)',
+          details: `Post "${post.lessonTitle}" marked as published on ${post.accountHandle}. ${realPostUrl ? `URL: ${realPostUrl}` : '(Manual Package upload)'}`,
+          level: 'success',
+        });
+      } else {
+        post.status = 'scheduled';
+        post.publishedPostUrl = undefined;
+        const lesson = sqliteDb.getLessonById(post.lessonId);
+        if (lesson) {
+          lesson.status = 'Scheduled';
+          sqliteDb.saveLesson(lesson);
+        }
       }
-
-      dbManager.addLog({
-        category: 'publish',
-        action: 'Post Published',
-        details: `Post "${post.lessonTitle}" marked as published on ${post.accountHandle}`,
-        level: 'success',
-      });
     }
 
-    dbManager.saveScheduledPost(post);
+    sqliteDb.saveScheduledPost(post);
     return post;
   }
 }
