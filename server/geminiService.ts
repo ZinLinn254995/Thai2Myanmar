@@ -293,7 +293,7 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
     if (!this.hasKey()) throw new Error('GEMINI_API_KEY is not configured on the server.');
     const sourceName = sourceLanguage === 'th' ? 'Thai' : 'Burmese';
     const targetName = targetLanguage === 'th' ? 'Thai' : 'Burmese';
-    const prompt = `Translate the following ${sourceName} text into natural, accurate ${targetName}. Preserve meaning, tone, names, and formatting. Return only the translation, without explanations unless needed to disambiguate.\\n\\nText:\\n${text}`;
+    const prompt = `Translate the following ${sourceName} text into natural, accurate ${targetName}. Preserve meaning, tone, names, and formatting. Return only the translation, without explanations unless needed to disambiguate.\n\nText:\n${text}`;
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -311,7 +311,7 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
   /** General-purpose assistant response using the configured server-side Gemini provider. */
   async chat(message: string): Promise<string> {
     if (!this.hasKey()) throw new Error('GEMINI_API_KEY is not configured on the server.');
-    const prompt = `You are the Thai2Myanmar AI Studio assistant. Help the user with Thai-Burmese language work and practical AI Studio workflows. Be honest about current capabilities; never claim you executed an action unless a tool actually did it. Respond in the language used by the user when practical.\\n\\nUser message:\\n${message}`;
+    const prompt = `You are the Thai2Myanmar AI Studio assistant. Help the user with Thai-Burmese language work and practical AI Studio workflows. Be honest about current capabilities; never claim you executed an action unless a tool actually did it. Respond in the language used by the user when practical.\n\nUser message:\n${message}`;
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
