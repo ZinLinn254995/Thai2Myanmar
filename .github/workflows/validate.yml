@@ -1,6 +1,9 @@
 name: Validate app
 
 on:
+  push:
+    branches:
+      - feat/live-translation-chat
   pull_request:
     branches:
       - v0/thai2myanmar-ai-studio
