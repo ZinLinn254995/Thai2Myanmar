@@ -86,6 +86,33 @@ export const api = {
     return data.data;
   },
 
+  // Live Gemini translation and chat
+  async translateText(text: string, sourceLanguage: 'th' | 'my', targetLanguage: 'th' | 'my'): Promise<string> {
+    const res = await fetch(`${API_BASE}/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, sourceLanguage, targetLanguage }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.success) {
+      throw new Error(payload?.error || `Translation failed (HTTP ${res.status})`);
+    }
+    return payload.data.translation;
+  },
+
+  async sendChatMessage(message: string): Promise<string> {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.success) {
+      throw new Error(payload?.error || `AI chat failed (HTTP ${res.status})`);
+    }
+    return payload.data.reply;
+  },
+
   // Voice
   async generateVoice(text: string, language: 'th-TH' | 'my-MM', voiceStyle?: string, speed?: number) {
     const res = await fetch(`${API_BASE}/voice/generate`, {
