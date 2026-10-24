@@ -498,8 +498,10 @@ async function startServer() {
     const { createServer: createViteServer } = await import('vite');
     // The preview proxy does not support Vite's HMR WebSocket. Serve a no-op
     // client so Vite cannot inject a reconnecting socket into the SPA.
-    app.get('/@vite/client', (_req: Request, res: Response) => {
-      res.type('application/javascript').send('');
+    app.use('/@vite/client', (_req: Request, res: Response) => {
+      // The preview proxy cannot carry Vite's HMR websocket. Return a no-op
+      // module before Vite middleware can serve its reconnecting client.
+      res.status(200).type('application/javascript').send('export {};');
     });
     const vite = await createViteServer({
       // The Express server is the public listener in preview/development. Vite's
@@ -531,11 +533,10 @@ async function startServer() {
       try {
         const template = await fs.promises.readFile(path.resolve(process.cwd(), 'index.html'), 'utf8');
         const html = await vite.transformIndexHtml(req.originalUrl, template);
-        const withoutHmrClient = html.replace(
-    /\s*<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>(?:[\s\S]*?<\/script>|\s*\/?>)/gi,
-    '',
-  );
-  res.type('html').send(withoutHmrClient);
+        const withoutHmrClient = html
+          .replace(/<script\s+type=["']module["']\s+src=["']\/@vite\/client["']\s*><\/script>/gi, '')
+          .replace(/<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*><\/script>/gi, '');
+        res.type('html').send(withoutHmrClient);
       } catch (error) {
         next(error);
       }
