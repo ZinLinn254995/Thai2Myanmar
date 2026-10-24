@@ -531,7 +531,11 @@ async function startServer() {
       try {
         const template = await fs.promises.readFile(path.resolve(process.cwd(), 'index.html'), 'utf8');
         const html = await vite.transformIndexHtml(req.originalUrl, template);
-        res.type('html').send(html.replace(/\s*<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>[\s\S]*?<\/script>/gi, ''));
+        const withoutHmrClient = html.replace(
+    /\s*<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>(?:[\s\S]*?<\/script>|\s*\/?>)/gi,
+    '',
+  );
+  res.type('html').send(withoutHmrClient);
       } catch (error) {
         next(error);
       }
