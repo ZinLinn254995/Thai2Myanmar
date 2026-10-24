@@ -503,6 +503,10 @@ async function startServer() {
       server: {
         middlewareMode: true,
         hmr: false,
+        // The preview proxy does not provide a stable Vite HMR socket.
+        // Disable both the socket and watcher so Vite never injects or
+        // attempts to reconnect the /@vite/client websocket.
+        watch: null,
       },
       appType: 'spa',
     });
