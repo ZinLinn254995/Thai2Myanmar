@@ -280,6 +280,42 @@ app.get('/api/quality/audit/:lessonId', (req: Request, res: Response) => {
   res.json({ success: true, data: audit });
 });
 
+// Live text translation and AI chat (Gemini key remains server-side)
+app.post('/api/translate', async (req: Request, res: Response) => {
+  try {
+    const { text, sourceLanguage, targetLanguage } = req.body || {};
+    if (typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'Text is required.' });
+    }
+    if (text.length > 5000) {
+      return res.status(400).json({ success: false, error: 'Text must be 5,000 characters or fewer.' });
+    }
+    if (!['th', 'my'].includes(sourceLanguage) || !['th', 'my'].includes(targetLanguage) || sourceLanguage === targetLanguage) {
+      return res.status(400).json({ success: false, error: 'Choose Thai and Burmese as different source and target languages.' });
+    }
+    const translation = await geminiService.translateText(text.trim(), sourceLanguage, targetLanguage);
+    res.json({ success: true, data: { translation } });
+  } catch (err: any) {
+    res.status(503).json({ success: false, error: err.message || 'Translation service unavailable.' });
+  }
+});
+
+app.post('/api/chat', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body || {};
+    if (typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Message is required.' });
+    }
+    if (message.length > 5000) {
+      return res.status(400).json({ success: false, error: 'Message must be 5,000 characters or fewer.' });
+    }
+    const reply = await geminiService.chat(message.trim());
+    res.json({ success: true, data: { reply } });
+  } catch (err: any) {
+    res.status(503).json({ success: false, error: err.message || 'AI chat service unavailable.' });
+  }
+});
+
 // Voice Generation API (Truthful reporting, no fake beeps)
 app.post('/api/voice/generate', async (req: Request, res: Response) => {
   try {
