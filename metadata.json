@@ -1,0 +1,7 @@
+{
+  "name": "Thai2Myanmar AI Studio",
+  "description": "AI-powered Thai to Myanmar video production and TikTok automation platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
