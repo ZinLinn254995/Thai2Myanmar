@@ -497,7 +497,13 @@ async function startServer() {
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      // The Express server is the public listener in preview/development. Vite's
+      // standalone HMR socket cannot survive the preview proxy's server restarts,
+      // so disable it here; v0 refreshes the preview when files are synced.
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
