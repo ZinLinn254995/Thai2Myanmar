@@ -93,7 +93,21 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, language, voiceStyle, speed }),
     });
-    return res.json();
+
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload?.success) {
+      throw new Error(payload?.error || `Voice generation failed (HTTP ${res.status})`);
+    }
+
+    // The API may respond successfully while the provider itself failed.
+    // Never let an ungenerated audio result appear to be a successful voice track.
+    if (!payload.data?.isRealGenerated || !payload.data?.audioBase64) {
+      throw new Error(
+        payload.data?.error || 'Real voice audio was not generated. Check the Gemini API configuration and quota.'
+      );
+    }
+
+    return payload;
   },
 
   // Video Production
