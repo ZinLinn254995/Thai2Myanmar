@@ -1,95 +1,63 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import React, { useMemo, useState } from 'react';
+import {
+  Activity, ArrowLeftRight, AudioLines, Bell, Bot, BookOpen, Check, ChevronDown,
+  Clock3, Command, Copy, Film, FolderKanban, History, LayoutDashboard, Library as LibraryIcon,
+  Menu, MessageSquare, MoreHorizontal, PanelRight, Plus, Search, Send, Settings,
+  Sparkles, SwatchBook, TerminalSquare, Languages, Upload, Video,
+  WandSparkles, X, Zap,
+} from 'lucide-react';
+import './index.css';
 
-import React from 'react';
-import { AppProvider, useApp } from './context/AppContext.tsx';
-import { Header } from './components/Header.tsx';
-import { Sidebar } from './components/Sidebar.tsx';
-import { ToastContainer } from './components/ToastContainer.tsx';
-import { OfflineIndicator } from './components/OfflineIndicator.tsx';
+type View = 'dashboard' | 'translation' | 'voice' | 'video' | 'content' | 'chat' | 'abilities' | 'modes' | 'activity' | 'settings';
 
-// Views
-import { Dashboard } from './components/Dashboard.tsx';
-import { LessonLibrary } from './components/LessonLibrary.tsx';
-import { ScriptStudio } from './components/ScriptStudio.tsx';
-import { VideoProductionStudio } from './components/VideoProductionStudio.tsx';
-import { VideoLibrary } from './components/VideoLibrary.tsx';
-import { PublishingHub } from './components/PublishingHub.tsx';
-import { AIProvidersView } from './components/AIProvidersView.tsx';
-import { UsageAndCostsView } from './components/UsageAndCostsView.tsx';
-import { SchedulerView } from './components/SchedulerView.tsx';
-import { ActivityLogsView } from './components/ActivityLogsView.tsx';
-import { SettingsView } from './components/SettingsView.tsx';
+const nav: { id: View; label: string; icon: React.ElementType }[] = [
+  { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+  { id: 'translation', label: 'Text Translation', icon: Languages },
+  { id: 'voice', label: 'Voice Studio', icon: AudioLines },
+  { id: 'video', label: 'Video Studio', icon: Film },
+  { id: 'content', label: 'Content Studio', icon: SwatchBook },
+  { id: 'chat', label: 'AI Chat', icon: MessageSquare },
+  { id: 'abilities', label: 'Ability Library', icon: LibraryIcon },
+  { id: 'modes', label: 'App Modes', icon: FolderKanban },
+  { id: 'activity', label: 'Activity History', icon: History },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
 
-const AppContent: React.FC = () => {
-  const { tab, isLoading } = useApp();
+const activities = [
+  { icon: Languages, title: 'Translation workspace opened', meta: 'Thai-Burmese · 12 min ago', color: 'cyan' },
+  { icon: AudioLines, title: 'Voice project drafted', meta: 'Bilingual voice-over · 48 min ago', color: 'purple' },
+  { icon: Sparkles, title: 'Content outline created', meta: 'Product launch script · 2 hr ago', color: 'blue' },
+];
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4 text-slate-300">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold animate-pulse">
-          🇹🇭🇲🇲
-        </div>
-        <div className="text-sm font-semibold tracking-wide">
-          Thai2Myanmar AI Studio စတင်နေပါသည်...
-        </div>
-        <div className="text-xs text-slate-500 font-mono">
-          Loading persistent database and AI engine
-        </div>
-      </div>
-    );
-  }
-
-  const renderActiveView = () => {
-    switch (tab) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'lessons':
-        return <LessonLibrary />;
-      case 'studio':
-        return <ScriptStudio />;
-      case 'production':
-        return <VideoProductionStudio />;
-      case 'videos':
-        return <VideoLibrary />;
-      case 'publish':
-        return <PublishingHub />;
-      case 'providers':
-        return <AIProvidersView />;
-      case 'usage':
-        return <UsageAndCostsView />;
-      case 'scheduler':
-        return <SchedulerView />;
-      case 'logs':
-        return <ActivityLogsView />;
-      case 'settings':
-        return <SettingsView />;
-      default:
-        return <Dashboard />;
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex flex-col text-slate-100">
-      <Header />
-      <div className="flex-1 flex overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          {renderActiveView()}
-        </main>
-      </div>
-      <ToastContainer />
-      <OfflineIndicator />
-    </div>
-  );
-};
-
-export default function App() {
-  return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
-  );
+function Sidebar({ active, setActive, collapsed, setCollapsed }: { active: View; setActive: (v: View) => void; collapsed: boolean; setCollapsed: (v: boolean) => void }) {
+  return <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <div className="brand"><div className="brand-mark"><Zap size={17} /></div>{!collapsed && <div><strong>Thai2Myanmar</strong><span>AI STUDIO <i>●</i></span></div>}<button className="icon-button sidebar-toggle" onClick={() => setCollapsed(!collapsed)} aria-label="Toggle sidebar">{collapsed ? <Menu size={18}/> : <ChevronDown size={17}/>}</button></div>
+    {!collapsed && <div className="workspace-pill"><span className="pulse-dot"/> THAI2MYANMAR MODE <ChevronDown size={13}/></div>}
+    <div className="nav-label">{!collapsed && 'WORKSPACE'}</div>
+    <nav>{nav.map(item => { const Icon = item.icon; return <button key={item.id} className={`nav-item ${active === item.id ? 'active' : ''}`} onClick={() => setActive(item.id)} title={collapsed ? item.label : undefined}><Icon size={18}/>{!collapsed && <span>{item.label}</span>}{!collapsed && item.id === 'chat' && <b className="nav-badge">AI</b>}</button> })}</nav>
+    <div className="sidebar-bottom">{!collapsed && <div className="connection-card"><div className="connection-title"><span className="status-dot"/> AI CORE CONNECTED</div><p>Workspace services are ready.</p><div className="connection-line"><span>Core status</span><strong>Operational</strong></div></div>}<button className="profile"><div className="avatar">ZL</div>{!collapsed && <div className="profile-copy"><strong>Zin Linn</strong><span>Workspace owner</span></div>}{!collapsed && <MoreHorizontal size={18}/>}</button></div>
+  </aside>
 }
+
+function Topbar({ active, onAssistant }: { active: View; onAssistant: () => void }) { const label = nav.find(n => n.id === active)?.label || 'Overview'; return <header className="topbar"><div className="breadcrumbs"><span>THAI2MYANMAR</span><span>/</span><strong>{label.toUpperCase()}</strong></div><div className="top-actions"><label className="search"><Search size={16}/><input placeholder="Search workspace"/><kbd>⌘ K</kbd></label><button className="icon-button"><Bell size={18}/><i className="notification-dot"/></button><button className="assistant-trigger" onClick={onAssistant}><Bot size={17}/> <span>AI Assistant</span></button></div></header> }
+
+function Status({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: string }) { return <span className={`status status-${tone}`}><span/> {children}</span> }
+function SectionHeader({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: React.ReactNode }) { return <div className="section-header"> <div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2>{title}</h2></div>{action}</div> }
+
+function Dashboard({ setActive }: { setActive: (v: View) => void }) { const [command, setCommand] = useState(''); const [submitted, setSubmitted] = useState(false); return <div className="page dashboard-page"><div className="hero"><div className="hero-glow"/><div className="eyebrow"><span className="spark-line"/> THAI2MYANMAR AI STUDIO <span className="demo-chip">PROTOTYPE</span></div><h1>Your AI <em>Workspace</em></h1><p>Translate, create, produce, and build with one intelligent workspace.</p><div className="command-wrap"><Command size={19}/><input value={command} onChange={e => setCommand(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) setSubmitted(true) }} placeholder="What would you like to create today?"/><button onClick={() => setSubmitted(true)}><WandSparkles size={16}/> Run command</button></div>{submitted && <div className="command-feedback"><Check size={15}/> Prototype command queued{command ? `: “${command}”` : ''}. The AI assistant can help plan this workflow.</div>}<div className="suggestions"><span>Try asking</span>{['Translate Thai text', 'Create a bilingual voice-over', 'Generate video subtitles', 'Build a new tool'].map(x => <button key={x} onClick={() => setCommand(x)}>{x} <ArrowLeftRight size={12}/></button>)}</div></div><SectionHeader eyebrow="CAPABILITIES" title="What do you want to build?" action={<button className="text-button" onClick={() => setActive('abilities')}>View ability library <span>→</span></button>}/><div className="capability-grid">{[{id:'translation' as View, icon:Languages, title:'Text Translation', desc:'Translate Thai and Burmese text with a focused workspace.', action:'Open workspace', tone:'cyan', tag:'READY'}, {id:'voice' as View, icon:AudioLines, title:'Voice Studio', desc:'Prepare bilingual voice-over projects with precise controls.', action:'Start a project', tone:'purple', tag:'READY'}, {id:'video' as View, icon:Video, title:'Video Studio', desc:'Plan scripts, subtitles, and production-ready media projects.', action:'Create project', tone:'blue', tag:'PLANNED'}, {id:'content' as View, icon:SwatchBook, title:'Content Studio', desc:'Turn ideas into outlines, scripts, and actionable workflows.', action:'Open studio', tone:'amber', tag:'BETA'}, {id:'chat' as View, icon:Bot, title:'AI Chat', desc:'Think through requests and plan work with your AI core.', action:'Start conversation', tone:'cyan', tag:'READY'}, {id:'abilities' as View, icon:LibraryIcon, title:'Ability Library', desc:'Discover reusable tools, templates, and capabilities.', action:'Browse abilities', tone:'purple', tag:'PROTOTYPE'}].map(card => {const Icon=card.icon; return <button className="capability-card" key={card.title} onClick={() => setActive(card.id)}><div className={`card-icon ${card.tone}`}><Icon size={20}/></div><div className="card-top"><Status tone={card.tone}>{card.tag}</Status><ArrowLeftRight size={15}/></div><h3>{card.title}</h3><p>{card.desc}</p><span className="card-action">{card.action} <span>→</span></span></button>})}</div><div className="lower-grid"><div className="panel"><SectionHeader eyebrow="WORKSPACE PULSE" title="Recent activity" action={<button className="icon-button"><MoreHorizontal size={18}/></button>}/>{activities.map(a => {const Icon=a.icon; return <div className="activity-row" key={a.title}><div className={`mini-icon ${a.color}`}><Icon size={16}/></div><div><strong>{a.title}</strong><span>{a.meta}</span></div><ChevronDown size={15} className="row-arrow"/></div>})}<button className="panel-link" onClick={() => setActive('activity')}>View activity history →</button></div><div className="panel workflow-panel"><SectionHeader eyebrow="EVOLUTION WORKFLOW" title="Capability lifecycle"/><div className="workflow"><div className="workflow-line"/>{['Understand request','Inspect abilities','Plan changes','Test & validate'].map((x,i)=><div className={`workflow-step ${i < 2 ? 'done' : i===2 ? 'current' : ''}`} key={x}><div>{i < 2 ? <Check size={13}/> : i+1}</div><span>{x}</span></div>)}</div><div className="workflow-footer"><Status tone="purple">PLANNING</Status><span>Reusable abilities are checked before new work begins.</span></div></div></div></div> }
+
+function Translation({ setActive }: { setActive: (v: View) => void }) { const [source, setSource] = useState(''); const [result, setResult] = useState(''); const [loading, setLoading] = useState(false); const run = () => { setLoading(true); setTimeout(() => { setResult(source ? 'Translation result will appear here once a translation service is connected.' : 'Add source text to preview a translation result.'); setLoading(false); }, 500) }; return <div className="page"><SectionHeader eyebrow="TEXT TRANSLATION / PROTOTYPE WORKSPACE" title="Translate with clarity" action={<Status tone="cyan">SERVICE BOUNDARY READY</Status>}/><div className="translation-toolbar"><div className="language-select">Thai <ChevronDown size={15}/></div><button className="swap" onClick={() => {}} aria-label="Swap languages"><ArrowLeftRight size={17}/></button><div className="language-select">Burmese <ChevronDown size={15}/></div><span className="toolbar-spacer"/><button className="ghost-button" onClick={() => {setSource('');setResult('')}}><X size={15}/> Clear</button><button className="primary-button" onClick={run}><Languages size={16}/> Translate</button></div><div className="editor-grid"><div className="editor-panel"><div className="editor-label"><span>Source text</span><span>{source.length} / 5,000</span></div><textarea value={source} onChange={e => setSource(e.target.value)} placeholder="Paste or type Thai text here..."/><div className="editor-footer"><span>Unicode supported</span><Upload size={15}/></div></div><div className="editor-panel result-panel"><div className="editor-label"><span>Translation result</span>{result && <button className="copy-button" onClick={() => navigator.clipboard?.writeText(result)}><Copy size={14}/> Copy</button>}</div><div className={`result-content ${loading ? 'loading' : ''}`}>{loading ? <><div className="loader"/> Preparing preview...</> : result || <><Languages size={27}/><span>Your translation will appear here</span><small>Results from connected services will be shown in this panel.</small></>}</div><div className="editor-footer"><Status tone={result ? 'cyan' : 'neutral'}>{result ? 'Preview ready' : 'Waiting for input'}</Status></div></div></div><div className="history-strip"><div><Clock3 size={16}/><strong>Translation history</strong><span>Prototype records will appear here after persistence is connected.</span></div><button className="text-button" onClick={() => setActive('activity')}>View all →</button></div></div> }
+
+function StudioView({ type, setActive }: { type: 'voice'|'video'|'content'; setActive: (v: View) => void }) { const data = { voice: { eyebrow:'VOICE STUDIO / PROJECT BUILDER', title:'Shape the voice of your story', icon:AudioLines, desc:'Prepare bilingual audio workflows with clear controls and honest processing states.' }, video:{ eyebrow:'VIDEO STUDIO / PROJECT BUILDER', title:'Bring your ideas into motion', icon:Video, desc:'Plan scripts, subtitles, uploads, and render settings in one focused production space.' }, content:{ eyebrow:'CONTENT STUDIO / CREATIVE WORKSPACE', title:'Turn ideas into momentum', icon:SwatchBook, desc:'Brainstorm, outline, and prepare content projects with help from your AI core.' }}[type]; const Icon=data.icon; return <div className="page"><SectionHeader eyebrow={data.eyebrow} title={data.title} action={<Status tone="purple">PROTOTYPE MODE</Status>}/><div className="studio-hero"><div className="studio-icon"><Icon size={28}/></div><div><h3>{data.desc}</h3><p>Connect a production service when you are ready to generate real output. No simulated media is presented as completed.</p></div><button className="primary-button"><Plus size={16}/> New project</button></div><div className="studio-grid"><div className="panel form-panel"><div className="panel-title"><TerminalSquare size={17}/> Project setup</div><label>Project name<input placeholder="Untitled project"/></label><label>{type === 'content' ? 'Core idea' : type === 'voice' ? 'Text input' : 'Script or subtitles'}<textarea placeholder={type === 'content' ? 'What would you like to explore?' : 'Add content when ready...'}/></label><div className="form-row"><label>Workflow status<div className="fake-select">Draft <ChevronDown size={14}/></div></label><label>Output language<div className="fake-select">English UI <ChevronDown size={14}/></div></label></div><button className="primary-button wide"><WandSparkles size={16}/> Prepare workflow</button></div><div className="panel empty-preview"><div className="preview-grid"/><div className="preview-center"><Icon size={28}/><strong>Preview area</strong><span>Output previews will appear after a connected service returns a result.</span><Status>AWAITING INPUT</Status></div></div></div><SectionHeader eyebrow="RECENT PROJECTS" title="Your work" action={<button className="text-button" onClick={() => setActive('activity')}>View history →</button>}/><div className="empty-table"><FolderKanban size={20}/><span>No persisted projects yet</span><small>Prototype workspace data is intentionally kept separate from production records.</small></div></div> }
+
+function Chat({ setActive }: { setActive: (v: View) => void }) { const [message, setMessage] = useState(''); const [sent, setSent] = useState<string[]>([]); return <div className="page chat-page"><SectionHeader eyebrow="AI CHAT / PLATFORM INTERFACE" title="Think with your AI core" action={<Status tone="cyan">SIMULATED RESPONSES</Status>}/><div className="chat-layout"><div className="chat-main"><div className="chat-intro"><div className="chat-orb"><Bot size={28}/></div><h3>What are we building today?</h3><p>Explore ideas, plan work, and discover reusable abilities. Responses in this prototype are clearly simulated.</p><div className="prompt-grid">{['Create a calculator tool','Find an ability for subtitles','Restore my workspace','Plan a bilingual campaign'].map(x=><button key={x} onClick={() => setMessage(x)}><Sparkles size={15}/>{x}</button>)}</div></div>{sent.map((x,i)=><div className="chat-message" key={i}><div className="avatar small">ZL</div><div><span>You</span><p>{x}</p></div></div>)}{sent.length > 0 && <div className="ai-message"><div className="chat-orb small"><Bot size={16}/></div><div><span>AI CORE · SIMULATED</span><p>I can help plan that workflow. I would first inspect the Ability Library, then propose a safe set of changes for your approval.</p><button className="text-button" onClick={() => setActive('abilities')}>Browse suggested abilities →</button></div></div>}<div className="composer"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing&&e.keyCode!==229&&message.trim()){setSent([...sent,message]);setMessage('')}}} placeholder="Ask the AI core anything..."/><button onClick={()=>{if(message.trim()){setSent([...sent,message]);setMessage('')}}}><Send size={17}/></button></div></div><div className="chat-context panel"><div className="panel-title"><PanelRight size={16}/> Active context</div><div className="context-item"><span>Current mode</span><strong>Thai2Myanmar</strong></div><div className="context-item"><span>Workspace</span><strong>AI Studio</strong></div><div className="context-item"><span>Execution state</span><Status tone="purple">WAITING</Status></div><div className="context-divider"/><div className="panel-title"><Activity size={16}/> Workflow states</div>{['Planning','Working','Testing','Approval'].map((x,i)=><div className="state-row" key={x}><span className={i===0?'state-current':''}/>{x}<small>{i===0?'Current':'Standby'}</small></div>)}</div></div></div> }
+
+function AbilityLibrary({ setActive }: { setActive: (v: View) => void }) { const abilities = ['Thai-Burmese Text Translation','Voice Generation','Subtitle Generation','Video Rendering','Content Script Creation','Media Project Template']; return <div className="page"><SectionHeader eyebrow="REUSABLE CAPABILITIES / PROTOTYPE DATA" title="Ability Library" action={<button className="primary-button"><Plus size={16}/> New ability</button>}/><div className="library-controls"><label className="search large"><Search size={16}/><input placeholder="Search abilities"/></label><button className="filter-button">All categories <ChevronDown size={15}/></button><button className="filter-button">Recently updated <ChevronDown size={15}/></button></div><div className="ability-grid">{abilities.map((x,i)=><div className="ability-card" key={x}><div className="ability-icon"><Zap size={17}/></div><div className="ability-body"><div className="ability-head"><h3>{x}</h3><Status tone={i<3?'cyan':'neutral'}>{i<3?'READY':'DEMO'}</Status></div><p>{['Translate source and target language content through a focused workspace.','Prepare bilingual narration settings and voice workflow inputs.','Plan subtitle generation for media projects.','Coordinate video render stages and export settings.','Turn a brief into a structured content script.','Reusable starting point for media projects.'][i]}</p><div className="ability-meta"><span>v{1+i}.0</span><span>Updated {i+1}d ago</span><button onClick={() => setActive(i===0?'translation':'chat')}>Open →</button></div></div></div>)}</div></div> }
+
+function Modes({ setActive }: { setActive: (v: View) => void }) { return <div className="page"><SectionHeader eyebrow="MULTIPLE APPLICATIONS / ONE PLATFORM" title="App Modes" action={<button className="primary-button"><Plus size={16}/> Create mode</button>}/><p className="page-lead">Switch applications without losing the AI Core, Ability Library, or your saved work.</p><div className="mode-grid"><div className="mode-card active-mode"><div className="mode-top"><div className="mode-icon cyan"><Zap size={22}/></div><Status tone="cyan">ACTIVE</Status></div><h3>Thai2Myanmar</h3><p>Translation, voice, video, and content workflows for Thai-Burmese creators.</p><div className="mode-meta"><span>v1.0 · Opened today</span><button onClick={() => setActive('dashboard')}>Open mode →</button></div></div>{['Restaurant Management','Calculator','Notes'].map(x=><div className="mode-card planned" key={x}><div className="mode-top"><div className="mode-icon"><FolderKanban size={22}/></div><Status>{x === 'Notes' ? 'DEMO' : 'PLANNED'}</Status></div><h3>{x}</h3><p>A future application mode built on the same reusable AI platform foundation.</p><div className="mode-meta"><span>Not yet implemented</span><button>View details →</button></div></div>)}</div></div> }
+
+function ActivityView() { return <div className="page"><SectionHeader eyebrow="WORKSPACE HISTORY" title="Activity History" action={<button className="filter-button">All activity <ChevronDown size={15}/></button>}/><div className="timeline">{[...activities,...activities].map((a,i)=>{const Icon=a.icon;return <div className="timeline-row" key={`${a.title}-${i}`}><div className={`mini-icon ${a.color}`}><Icon size={16}/></div><div><strong>{a.title}</strong><span>{a.meta} · Prototype record</span></div><Status tone={i%2?'neutral':'cyan'}>{i%2?'DRAFT':'READY'}</Status></div>})}</div></div> }
+
+function AssistantPanel({ close }: { close: () => void }) { return <aside className="assistant-panel"><div className="assistant-header"><div><span className="eyebrow">AI CORE</span><h3>Assistant</h3></div><button className="icon-button" onClick={close}><X size={18}/></button></div><div className="assistant-status"><span className="pulse-dot"/> Ready to help plan your next workflow.</div><div className="assistant-body"><div className="assistant-bubble"><Bot size={17}/><p>Welcome back. I can help you explore capabilities, prepare a project, or think through a new app mode.</p></div><div className="assistant-section"><span>Suggested actions</span>{['Explore translation abilities','Plan a new content project','Review workspace activity'].map(x=><button key={x}><Sparkles size={14}/>{x}<span>→</span></button>)}</div></div><div className="assistant-composer"><input placeholder="Message assistant..."/><button><Send size={16}/></button></div></aside> }
+
+export default function App() { const [active, setActive] = useState<View>('dashboard'); const [collapsed, setCollapsed] = useState(false); const [assistant, setAssistant] = useState(true); const view = useMemo(() => { if(active==='dashboard') return <Dashboard setActive={setActive}/>; if(active==='translation') return <Translation setActive={setActive}/>; if(['voice','video','content'].includes(active)) return <StudioView type={active as 'voice'|'video'|'content'} setActive={setActive}/>; if(active==='chat') return <Chat setActive={setActive}/>; if(active==='abilities') return <AbilityLibrary setActive={setActive}/>; if(active==='modes') return <Modes setActive={setActive}/>; if(active==='activity') return <ActivityView/>; return <div className="page"><SectionHeader eyebrow="WORKSPACE SETTINGS" title="Settings"/><div className="empty-table"><Settings size={20}/><span>Settings controls are ready for future workspace configuration.</span></div></div> }, [active]); return <div className="app-shell"><Sidebar active={active} setActive={setActive} collapsed={collapsed} setCollapsed={setCollapsed}/><div className="app-main"><Topbar active={active} onAssistant={()=>setAssistant(!assistant)}/><main>{view}</main></div>{assistant && <AssistantPanel close={()=>setAssistant(false)}/>}</div> }
