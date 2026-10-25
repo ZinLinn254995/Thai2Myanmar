@@ -200,7 +200,6 @@ Provide exact Burmese phonetic notation (မြန်မာအသံထွက်
         config: {
           systemInstruction: systemPrompt,
           responseMimeType: 'application/json',
-          temperature: 0.7,
         },
       });
 
@@ -273,7 +272,6 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          temperature: 0.7,
         },
       });
 
@@ -288,6 +286,42 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
       throw new Error(`Failed to rewrite section: ${err.message || String(err)}`);
     }
   }
+  /** Translate Thai/Burmese text using the configured server-side Gemini provider. */
+  async translateText(text: string, sourceLanguage: 'th' | 'my', targetLanguage: 'th' | 'my'): Promise<string> {
+    if (!this.hasKey()) throw new Error('GEMINI_API_KEY is not configured on the server.');
+    const sourceName = sourceLanguage === 'th' ? 'Thai' : 'Burmese';
+    const targetName = targetLanguage === 'th' ? 'Thai' : 'Burmese';
+    const prompt = `Translate the following ${sourceName} text into natural, accurate ${targetName}. Preserve meaning, tone, names, and formatting. Return only the translation, without explanations unless needed to disambiguate.\n\nText:\n${text}`;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+      });
+      const result = (response.text || '').trim();
+      if (!result) throw new Error('Gemini returned an empty translation.');
+      return result;
+    } catch (err: any) {
+      throw new Error(`Translation failed: ${err?.message || String(err)}`);
+    }
+  }
+
+  /** General-purpose assistant response using the configured server-side Gemini provider. */
+  async chat(message: string): Promise<string> {
+    if (!this.hasKey()) throw new Error('GEMINI_API_KEY is not configured on the server.');
+    const prompt = `You are the Thai2Myanmar AI Studio assistant. Help the user with Thai-Burmese language work and practical AI Studio workflows. Be honest about current capabilities; never claim you executed an action unless a tool actually did it. Respond in the language used by the user when practical.\n\nUser message:\n${message}`;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+      });
+      const result = (response.text || '').trim();
+      if (!result) throw new Error('Gemini returned an empty response.');
+      return result;
+    } catch (err: any) {
+      throw new Error(`AI chat failed: ${err?.message || String(err)}`);
+    }
+  }
+
 }
 
 export const geminiService = new GeminiService();
