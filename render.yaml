@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: thai2myanmar-ai-studio
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+    disk:
+      name: thai2myanmar-data
+      mountPath: /app/data
+      sizeGB: 1

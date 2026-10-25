@@ -1,0 +1,17 @@
+node_modules
+.git
+.github
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+coverage
+dist
+build
+data/*.sqlite
+data/*.sqlite-*
+data/audio/*
+data/videos/*
+data/temp_render/*
+data/tmp/*
