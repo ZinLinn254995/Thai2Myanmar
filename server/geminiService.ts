@@ -200,7 +200,6 @@ Provide exact Burmese phonetic notation (မြန်မာအသံထွက်
         config: {
           systemInstruction: systemPrompt,
           responseMimeType: 'application/json',
-          temperature: 0.7,
         },
       });
 
@@ -273,7 +272,6 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          temperature: 0.7,
         },
       });
 
