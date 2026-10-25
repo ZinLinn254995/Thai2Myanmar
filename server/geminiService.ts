@@ -296,7 +296,6 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
-        config: { temperature: 0.2 },
       });
       const result = (response.text || '').trim();
       if (!result) throw new Error('Gemini returned an empty translation.');
@@ -314,7 +313,6 @@ Ensure authentic Thai spelling and high-accuracy Burmese phonetics (မြန်
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: prompt,
-        config: { temperature: 0.5 },
       });
       const result = (response.text || '').trim();
       if (!result) throw new Error('Gemini returned an empty response.');
